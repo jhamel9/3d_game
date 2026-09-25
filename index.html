@@ -12,7 +12,7 @@
     font-family: Arial, Helvetica, sans-serif;
     -webkit-user-select: none; user-select: none; touch-action: none;
   }
-  #app-canvas { display: block; width: 100%; height: 100%; }
+  #app-canvas { display: block; width: 100%; height: 100%; cursor: none; }
 
   #loading-screen {
     position: fixed; inset: 0; background: #1a1a1a; color: #eee;
@@ -57,7 +57,7 @@
 
   #mobile-controls { position: fixed; inset: 0; z-index: 20; display: none; pointer-events: none; }
 
-  /* Right half of screen: swipe to look around (CODM style) */
+  /* Right half of screen: swipe to look + rotate player (CODM style) */
   #camera-zone {
     position: absolute;
     top: 0; right: 0;
@@ -130,7 +130,7 @@
 
 <div id="hud">
   <div>WASD / Arrows: Move &nbsp;|&nbsp; Shift: Run &nbsp;|&nbsp; Space: Jump</div>
-  <div><span class="hint">Mouse drag</span> / <span class="hint">right-screen touch</span>: Look around</div>
+  <div><span class="hint">Mouse</span> / <span class="hint">right-screen touch</span>: Look &amp; aim</div>
   <div><span class="hint">E</span>: Pick up / Drop &nbsp;|&nbsp; <span class="hint">C</span>/<span class="hint">V</span>: Toggle camera mode</div>
   <div id="camera-readout">camera: third-person</div>
   <div id="state-readout">state: idle</div>
@@ -177,29 +177,44 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 
 /* =====================================================================
    CONFIG
+   ---------------------------------------------------------------------
+   CODM-mobile / ROS-desktop feel.
+   KEY MODEL:
+     - Camera yaw/pitch is user-controlled (mouse / right-screen touch).
+     - MOVEMENT is camera-relative and independent of facing, so
+       strafing works.
+     - PLAYER FACING: while idle the player faces the camera yaw; while
+       moving forward/sideways the player faces the ACTUAL movement
+       direction (so A turns left, D turns right).
+     - Desktop mouse rotates the camera WITHOUT a click. Pointer Lock is
+       requested automatically for cursor hiding; rotation works even
+       if pointer lock is denied.
    ===================================================================== */
 const CONFIG = {
   ui: {
     alwaysShowMobileControls: true,
     toggleKey: 'KeyM',
-    joystickRunThreshold: 0.85,
-    joystickDeadzone: 0.15,
+
+    /* Sprint hysteresis — enter sprint high, exit lower so walk/run
+       never flickers at the threshold. */
+    joystickRunThreshold: 0.85,   // enter sprint
+    joystickRunExit:      0.70,   // exit sprint
+    joystickDeadzone:     0.15,
   },
 
-  /* ---- LOOK / CAMERA CONTROL ----------------------------------------
-     TPP orbit camera, driven by mouse drag (desktop) or by touching the
-     right half of the screen (mobile). Movement is relative to the
-     camera's horizontal forward direction — exactly like CODM /
-     Rules of Survival. */
   look: {
-    mouseSensitivity:  0.0025,   // radians per pixel of mouse drag
-    touchSensitivity:  0.0045,   // radians per pixel of touch drag
-    minPitch: -0.15,             // lower limit (looking slightly up)
-    maxPitch:  1.10,             // upper limit (looking steeply down)
-    startPitch: 0.30,            // default vertical angle
-    startYaw:   0.0,             // default horizontal angle
-    followLerp: 12,              // how fast the camera follows the player
-    minCameraY: 0.30,            // don't let the camera dip below ground
+    /* Desktop mouse uses movementX / movementY — immediate, 1:1,
+       no smoothing. */
+    mouseSensitivity: 0.0025,
+    /* Mobile right-side drag. */
+    touchSensitivity: 0.0035,
+    minPitch: -0.35,
+    maxPitch:  1.15,
+    startPitch: 0.20,
+    startYaw:   0.0,
+    /* Camera position track — snappy, no floaty drag. */
+    followLerp: 30,
+    minCameraY: 0.30,
   },
 
   paths: {
@@ -246,27 +261,36 @@ const CONFIG = {
   },
 
   movement: {
-    walkSpeed: 3.2,
-    runMultiplier: 2.0,
-    rotationSpeed: 12,
+    walkSpeed: 3.8,
+    runMultiplier: 2.2,
+    /* Player turns toward target at this rate (rad/s). */
+    rotationSpeed: 16,
 
-    /* Sideways (A/D) movement slows a little — pure W/S stays full speed. */
-    lateralSpeedMultiplier: 0.50,
-    /* Rotation is UNIFORM in every direction now. */
+    /* Strafing only slightly slower than forward. */
+    lateralSpeedMultiplier: 0.90,
     lateralRotationMultiplier: 1.0,
+
+    /* Exponential accel/decel: snappy start, quick controlled stop. */
+    acceleration: 25,
+    deceleration: 30,
 
     gravity: -20,
     jumpSpeed: 7.5,
     groundY: 0,
-    backwardSpeedMultiplier: 0.75,
+    backwardSpeedMultiplier: 0.85,
     backwardDotThreshold:   -0.5,
   },
 
   camera: {
-    distance: 4.5,
-    lookHeightFactor: 0.55,
+    distanceBase: 3.8,
+    distanceHeightFactor: 2.0,
+    lookHeightFactor: 0.62,
     birdHeightFactor: 4.5,
     birdDistanceFactor: 3.2,
+
+    collisionEnabled: true,
+    collisionPadding: 0.25,
+    collisionMinDistance: 0.40,
   },
 
   animation: {
@@ -544,6 +568,9 @@ if (CONFIG.debug.showHelpers) {
   scene.add(axesHelper);
 }
 
+/* Camera-collidable props (ground is intentionally excluded). */
+const cameraCollidables = [];
+
 const markerGeo = new THREE.ConeGeometry(0.25, 0.9, 8);
 const markerMat = new THREE.MeshStandardMaterial({ color: 0xff5555 });
 const markerPositions = [
@@ -555,6 +582,7 @@ for (const [x, z] of markerPositions) {
   marker.position.set(x, 0.45, z);
   marker.castShadow = true;
   scene.add(marker);
+  cameraCollidables.push(marker);
 }
 
 /* =====================================================================
@@ -736,7 +764,8 @@ if (isMobileDevice) {
 }
 
 /* =====================================================================
-   JOYSTICK  (movement only — same as WASD)
+   JOYSTICK  (movement only — LEFT side of screen)
+   Includes sprint hysteresis so walk/run never flickers.
    ===================================================================== */
 const Joystick = { active: false, originX: 0, originY: 0, maxRadius: 45 };
 
@@ -747,6 +776,7 @@ const camBtn  = document.getElementById('cam-btn');
 const useBtn  = document.getElementById('use-btn');
 
 let joystickTouchId = null;
+let _sprintLatched = false;
 
 function joystickStart(clientX, clientY) {
   const rect = joystickZone.getBoundingClientRect();
@@ -771,6 +801,7 @@ function joystickMove(clientX, clientY) {
     InputState.moveX = 0;
     InputState.moveZ = 0;
     InputState.run = false;
+    _sprintLatched = false;
     joystickStick.classList.remove('running');
     return;
   }
@@ -779,14 +810,18 @@ function joystickMove(clientX, clientY) {
   InputState.moveX = Math.cos(angle) * mag;
   InputState.moveZ = -Math.sin(angle) * mag;
 
-  InputState.run = mag >= CONFIG.ui.joystickRunThreshold;
-  joystickStick.classList.toggle('running', InputState.run);
+  if (!_sprintLatched && mag >= CONFIG.ui.joystickRunThreshold) _sprintLatched = true;
+  else if (_sprintLatched && mag < CONFIG.ui.joystickRunExit) _sprintLatched = false;
+
+  InputState.run = _sprintLatched;
+  joystickStick.classList.toggle('running', _sprintLatched);
 }
 function joystickEnd() {
   Joystick.active = false;
   joystickTouchId = null;
   joystickStick.style.transform = `translate(0px, 0px)`;
   joystickStick.classList.remove('running');
+  _sprintLatched = false;
   InputState.moveX = 0;
   InputState.moveZ = 0;
   InputState.run = false;
@@ -807,7 +842,7 @@ joystickZone.addEventListener('touchend', (e) => {
 }, { passive: false });
 joystickZone.addEventListener('touchcancel', joystickEnd);
 
-/* Mouse fallback for the joystick on desktop */
+/* Mouse fallback so the joystick is testable on desktop. */
 let mouseJoystickDown = false;
 joystickZone.addEventListener('mousedown', (e) => {
   mouseJoystickDown = true;
@@ -819,10 +854,11 @@ window.addEventListener('mousemove', (e) => { if (mouseJoystickDown) joystickMov
 window.addEventListener('mouseup', () => { if (mouseJoystickDown) { mouseJoystickDown = false; joystickEnd(); } });
 
 /* =====================================================================
-   CAMERA LOOK  —  CODM / Rules of Survival style
+   CAMERA LOOK  —  RIGHT half of screen (mobile) / mouse (desktop)
    ---------------------------------------------------------------------
-   MOBILE: swipe anywhere on the right half of the screen.
-   DESKTOP: click-and-drag the mouse anywhere that is not a UI button.
+   The look input ALWAYS rotates the camera. When idle, the player
+   horizontal facing follows camera yaw. When moving, the player faces
+   the actual movement direction instead.
    ===================================================================== */
 const cameraZone = document.getElementById('camera-zone');
 
@@ -830,12 +866,13 @@ let lookTouchId = null;
 let lookLastX = 0, lookLastY = 0;
 
 cameraZone.addEventListener('touchstart', (e) => {
-  if (lookTouchId !== null) return; // one look finger at a time
+  if (lookTouchId !== null) return;       // one look finger at a time
   const t = e.changedTouches[0];
   lookTouchId = t.identifier;
   lookLastX = t.clientX;
   lookLastY = t.clientY;
   e.preventDefault();
+  e.stopPropagation();
 }, { passive: false });
 
 cameraZone.addEventListener('touchmove', (e) => {
@@ -864,37 +901,59 @@ function endLookTouch(e) {
 cameraZone.addEventListener('touchend', endLookTouch, { passive: false });
 cameraZone.addEventListener('touchcancel', endLookTouch, { passive: false });
 
-/* --- Desktop mouse look: click-drag anywhere that's not a UI control --- */
-let mouseLookDown = false;
-let mouseLookLastX = 0, mouseLookLastY = 0;
-
+/* ---------------------------------------------------------------------
+   DESKTOP MOUSE — automatic pointer capture
+   ---------------------------------------------------------------------
+   Rotation uses movementX / movementY so it works IMMEDIATELY with no
+   click. Pointer Lock is requested automatically (on load, on first user
+   gesture, and re-acquired after any loss) for cursor hiding.
+   Clicking is never required to look around.
+   ------------------------------------------------------------------- */
 function isUIElement(el) {
   if (!el || !el.closest) return false;
   return !!(el.closest('.mobile-btn') || el.closest('#joystick-zone'));
 }
 
-window.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return;
-  if (isUIElement(e.target)) return;
-  mouseLookDown = true;
-  mouseLookLastX = e.clientX;
-  mouseLookLastY = e.clientY;
+function tryLockPointer() {
+  if (document.pointerLockElement || document.webkitPointerLockElement) return;
+  const el = renderer.domElement;
+  const req = el.requestPointerLock || el.webkitRequestPointerLock;
+  if (req) {
+    try { req.call(el); } catch (err) { /* ignore */ }
+  }
+}
+
+/* Attempt an immediate lock (may be blocked until user gesture). */
+tryLockPointer();
+
+/* Retry on the first user interaction of any kind — one time only. */
+['click', 'mousedown', 'keydown', 'touchstart'].forEach((evt) => {
+  window.addEventListener(evt, tryLockPointer, { once: true, passive: true });
 });
 
+/* Re-lock after loss (Esc, tab change, etc.) on the next user gesture. */
+document.addEventListener('pointerlockchange', () => {
+  const locked = document.pointerLockElement || document.webkitPointerLockElement;
+  if (!locked) {
+    window.addEventListener('mousedown', tryLockPointer, { once: true });
+    window.addEventListener('keydown', tryLockPointer, { once: true });
+  }
+});
+
+/* Mouse movement rotates the camera — immediate, 1:1, no smoothing.
+   Works WITH or WITHOUT pointer lock (movementX/movementY are always
+   available on the mousemove event). */
 window.addEventListener('mousemove', (e) => {
-  if (!mouseLookDown) return;
   if (!cameraController) return;
-  const dx = e.clientX - mouseLookLastX;
-  const dy = e.clientY - mouseLookLastY;
-  mouseLookLastX = e.clientX;
-  mouseLookLastY = e.clientY;
+  if (isUIElement(e.target)) return;           // don't rotate over buttons
+  const dx = e.movementX || 0;
+  const dy = e.movementY || 0;
+  if (dx === 0 && dy === 0) return;
   cameraController.rotate(
     dx * CONFIG.look.mouseSensitivity,
     dy * CONFIG.look.mouseSensitivity
   );
 });
-
-window.addEventListener('mouseup', () => { mouseLookDown = false; });
 
 /* --- Action buttons --- */
 function bindHoldButton(el, onDown, onUp) {
@@ -1616,6 +1675,20 @@ class AnimationController {
 
 /* =====================================================================
    PLAYER CONTROLLER
+   ---------------------------------------------------------------------
+   KEY MODEL:
+     - CAMERA yaw/pitch controlled by mouse / right-screen touch.
+     - PLAYER HORIZONTAL FACING:
+         * idle → faces camera yaw
+         * moving forward or sideways → faces the actual movement
+           direction (A turns left, D turns right)
+         * moving backward → faces camera yaw (backward-walk anim)
+     - MOVEMENT is camera-relative and independent of facing, so the
+       player can strafe sideways.
+
+   NOTE: The earlier "in-place turn wobble" (fake foot-IK shuffle) has
+   been REMOVED. It fought the pickup IK and caused an arm/root snap on
+   every mouse/touch rotation.
    ===================================================================== */
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -1625,7 +1698,8 @@ class PlayerController {
     this.mixer = new THREE.AnimationMixer(model);
     this.animationController = new AnimationController(this.mixer, clips);
     this.animationController.onPickupFinished = () => this.endPickup();
-    this.velocity = new THREE.Vector3(0, 0, 0);
+    this.velocity = new THREE.Vector3(0, 0, 0);            // vertical (jump/gravity)
+    this.horizontalVelocity = new THREE.Vector3(0, 0, 0);  // smoothed XZ
     this.grounded = true;
     this.facingAngle = 0;
     this.stateReadout = document.getElementById('state-readout');
@@ -1678,6 +1752,7 @@ class PlayerController {
     this.pickupItem = item;
     this.pickupTimer = 0; this.grabDone = false;
     this.velocity.set(0, 0, 0);
+    this.horizontalVelocity.set(0, 0, 0);
     this.animationController.setLocomotion(false);
   }
   _startPickupAnim() {
@@ -1733,16 +1808,22 @@ class PlayerController {
     }
     const cfg = CONFIG.movement;
 
-    /* Smooth the incoming stick so shaky fingers do not shake the player. */
-    const inputLerp = 1 - Math.exp(-22 * delta);
+    /* -----------------------------------------------------------------
+       INPUT SMOOTHING
+       -45 exp rate → near-immediate joystick response; tiny low-pass
+       keeps analog feel.
+       ----------------------------------------------------------------- */
+    const inputLerp = 1 - Math.exp(-45 * delta);
     this._smoothX += (input.moveX - this._smoothX) * inputLerp;
     this._smoothZ += (input.moveZ - this._smoothZ) * inputLerp;
     this._smoothRun = input.run;
 
-    /* -------- MOVEMENT FRAME = CAMERA YAW --------------------------
-       W / stick-up  moves the character AWAY from the camera.
-       D / stick-right moves the character to the right of the screen.
-       This is exactly how CODM / Rules of Survival handles movement. */
+    /* -----------------------------------------------------------------
+       MOVEMENT FRAME = CAMERA YAW
+       Joystick UP → away from camera (camera forward).
+       Joystick RIGHT → camera's right.
+       Diagonal normalized → no diagonal speed boost.
+       ----------------------------------------------------------------- */
     const camYaw = cameraController ? cameraController.yaw : 0;
     this._forward.set(Math.sin(camYaw), 0, Math.cos(camYaw));
     this._right.set(-Math.cos(camYaw), 0, Math.sin(camYaw));
@@ -1759,39 +1840,60 @@ class PlayerController {
     const isMoving = moveLenSq > 1e-6;
     if (isMoving) this._moveDir.normalize();
 
-    /* Sideways (A/D) movement slows slightly; forward/back stays full. */
+    /* Slight speed reduction for pure sideways strafe. */
     const forwardness   = isMoving ? Math.abs(this._moveDir.dot(this._forward)) : 1;
     const lateralAmount = 1 - forwardness;
     const lateralSpeedMul = THREE.MathUtils.lerp(1, cfg.lateralSpeedMultiplier, lateralAmount);
 
+    /* Backward = moving opposite to camera forward. */
     let isBackward = false;
     if (isMoving &&
         this.cameraMode === 'third_person' &&
         this.animationController.hasBackwardClip()) {
-      isBackward = this._moveDir.dot(this._forward) < CONFIG.movement.backwardDotThreshold;
+      isBackward = this._moveDir.dot(this._forward) < cfg.backwardDotThreshold;
     }
     this.isBackward = isBackward;
 
-    let speed = cfg.walkSpeed * lateralSpeedMul;
+    let targetSpeed = cfg.walkSpeed * lateralSpeedMul;
     const isRunning = isMoving && this._smoothRun && !isBackward;
-    if (isBackward) speed *= cfg.backwardSpeedMultiplier;
-    else if (isRunning) speed *= cfg.runMultiplier;
+    if (isBackward) targetSpeed *= cfg.backwardSpeedMultiplier;
+    else if (isRunning) targetSpeed *= cfg.runMultiplier;
 
-    this.root.position.x += this._moveDir.x * speed * delta;
-    this.root.position.z += this._moveDir.z * speed * delta;
+    /* -----------------------------------------------------------------
+       ACCELERATION / DECELERATION
+       Exponential approach — snappy start, quick controlled stop.
+       ----------------------------------------------------------------- */
+    const targetVx = this._moveDir.x * targetSpeed;
+    const targetVz = this._moveDir.z * targetSpeed;
+    const rate = isMoving ? cfg.acceleration : cfg.deceleration;
+    const velT = 1 - Math.exp(-rate * delta);
+    this.horizontalVelocity.x += (targetVx - this.horizontalVelocity.x) * velT;
+    this.horizontalVelocity.z += (targetVz - this.horizontalVelocity.z) * velT;
 
-    /* Uniform rotation speed in every direction. */
-    if (isMoving) {
-      const fx = isBackward ? -this._moveDir.x : this._moveDir.x;
-      const fz = isBackward ? -this._moveDir.z : this._moveDir.z;
-      const targetAngle = Math.atan2(fx, fz);
-      this.facingAngle = rotateTowardsAngle(
-        this.facingAngle, targetAngle,
-        cfg.rotationSpeed * delta
-      );
-      this.root.rotation.y = this.facingAngle;
+    this.root.position.x += this.horizontalVelocity.x * delta;
+    this.root.position.z += this.horizontalVelocity.z * delta;
+
+    /* -----------------------------------------------------------------
+       PLAYER HORIZONTAL FACING
+       - Moving forward or sideways → face the ACTUAL movement direction
+         (A turns left, D turns right, diagonals work too).
+       - Backward, or idle → face camera yaw.
+       ----------------------------------------------------------------- */
+    let targetAngle;
+    if (isMoving && !isBackward) {
+      targetAngle = Math.atan2(this._moveDir.x, this._moveDir.z);
+    } else if (cameraController) {
+      targetAngle = cameraController.yaw;
+    } else {
+      targetAngle = this.facingAngle;
     }
+    this.facingAngle = rotateTowardsAngle(
+      this.facingAngle, targetAngle,
+      cfg.rotationSpeed * delta
+    );
+    this.root.rotation.y = this.facingAngle;
 
+    /* Vertical motion (gravity + jump) — unchanged. */
     const wasGrounded = this.grounded;
     this.velocity.y += cfg.gravity * delta;
     this.root.position.y += this.velocity.y * delta;
@@ -1823,6 +1925,7 @@ class PlayerController {
     if (!item) { this.endPickup(); return; }
     const cfg = CONFIG.pickup;
     this.velocity.set(0, 0, 0);
+    this.horizontalVelocity.set(0, 0, 0);
     this.root.position.y = CONFIG.movement.groundY;
     if (!this.grabDone) item.mesh.getWorldPosition(this._grabWorld);
 
@@ -1917,10 +2020,14 @@ function rotateTowardsAngle(current, target, maxDelta) {
 }
 
 /* =====================================================================
-   CAMERA CONTROLLER  —  ORBIT (CODM / Rules of Survival style)
+   CAMERA CONTROLLER  —  ORBIT (CODM / ROS style)
    ---------------------------------------------------------------------
-   The camera orbits around the player at a yaw + pitch controlled by
-   the user. It does NOT auto-rotate to follow the player's facing.
+   - Camera orbits the player at a user-controlled yaw + pitch.
+   - yaw is UN-INVERTED: swiping right on the look area rotates the
+     view to the right (this is the sign flip versus the previous build).
+   - Snappy follow (followLerp = 30) — glued to the player, no floaty lag.
+   - Ray-cast collision pulls the camera in when a prop blocks the view
+     and eases the distance back out when clear.
    ===================================================================== */
 class CameraController {
   constructor(camera, target, info) {
@@ -1930,22 +2037,35 @@ class CameraController {
     this.mode = 'third_person';
 
     const h = info.height;
-    this.distance = Math.max(4.5, h * 2.4);
-    this.lookHeight = h * 0.62;
+    this.distance = Math.max(
+      CONFIG.camera.distanceBase,
+      h * CONFIG.camera.distanceHeightFactor
+    );
+    this.lookHeight = h * CONFIG.camera.lookHeightFactor;
 
-    this.yaw = CONFIG.look.startYaw;
+    this.yaw   = CONFIG.look.startYaw;
     this.pitch = CONFIG.look.startPitch;
 
     this.currentTargetPos = new THREE.Vector3();
     this._initialized = false;
 
-    this.birdHeight = h * CONFIG.camera.birdHeightFactor;
+    this.birdHeight   = h * CONFIG.camera.birdHeightFactor;
     this.birdDistance = h * CONFIG.camera.birdDistanceFactor;
+
+    this._raycaster = new THREE.Raycaster();
+    this._rayFrom = new THREE.Vector3();
+    this._rayTo   = new THREE.Vector3();
+    this._rayDir  = new THREE.Vector3();
+
+    this._smoothedDistance = this.distance;
   }
 
+  /* Called from look input. yaw wraps 360°, pitch is clamped.
+     NOTE: yaw is DEcreased by dYaw so a rightward swipe/mouse move
+     rotates the view to the right (un-inverted). */
   rotate(dYaw, dPitch) {
-    this.yaw += dYaw;
-    if (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
+    this.yaw -= dYaw;
+    if (this.yaw >  Math.PI) this.yaw -= Math.PI * 2;
     if (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
     this.pitch = THREE.MathUtils.clamp(
       this.pitch + dPitch, CONFIG.look.minPitch, CONFIG.look.maxPitch
@@ -1980,14 +2100,46 @@ class CameraController {
 
     const cosP = Math.cos(this.pitch);
     const sinP = Math.sin(this.pitch);
-    const hDist = this.distance * cosP;
-    const vDist = this.distance * sinP;
 
-    /* Camera sits BEHIND the yaw direction. With yaw = 0 the camera
-       is on -Z, looking toward +Z. */
-    let camX = lookAtX - Math.sin(this.yaw) * hDist;
-    let camY = lookAtY + vDist;
-    let camZ = lookAtZ - Math.cos(this.yaw) * hDist;
+    /* Desired camera direction (before collision).
+       With yaw = 0 the camera sits at -Z, looking toward +Z. */
+    let camX = lookAtX - Math.sin(this.yaw) * this.distance * cosP;
+    let camY = lookAtY + this.distance * sinP;
+    let camZ = lookAtZ - Math.cos(this.yaw) * this.distance * cosP;
+
+    /* ---------------- CAMERA COLLISION ---------------- */
+    let targetDist = this.distance;
+    if (CONFIG.camera.collisionEnabled && cameraCollidables.length > 0) {
+      this._rayFrom.set(lookAtX, lookAtY, lookAtZ);
+      this._rayTo.set(camX, camY, camZ);
+      this._rayDir.copy(this._rayTo).sub(this._rayFrom);
+      const fullDist = this._rayDir.length();
+      if (fullDist > 0.001) {
+        this._rayDir.divideScalar(fullDist);
+        this._raycaster.set(this._rayFrom, this._rayDir);
+        this._raycaster.far = fullDist;
+        const hits = this._raycaster.intersectObjects(cameraCollidables, true);
+        if (hits.length > 0) {
+          targetDist = Math.max(
+            CONFIG.camera.collisionMinDistance,
+            hits[0].distance - CONFIG.camera.collisionPadding
+          );
+        }
+      }
+    }
+
+    /* Snap-in on block (no clipping), ease-out when clear. */
+    if (targetDist < this._smoothedDistance) {
+      this._smoothedDistance = targetDist;
+    } else {
+      const easeT = 1 - Math.exp(-8 * delta);
+      this._smoothedDistance += (targetDist - this._smoothedDistance) * easeT;
+    }
+
+    const useDist = this._smoothedDistance;
+    camX = lookAtX - Math.sin(this.yaw) * useDist * cosP;
+    camY = lookAtY + useDist * sinP;
+    camZ = lookAtZ - Math.cos(this.yaw) * useDist * cosP;
 
     camY = Math.max(camY, CONFIG.look.minCameraY);
 
@@ -2037,9 +2189,13 @@ function animate() {
   if (player) {
     if (!cameraController) {
       cameraController = new CameraController(camera, player.root, player.info);
-      // Snap camera to the desired orbit position immediately.
+      cameraController.snap();
       cameraController.update(0.016);
       cameraReadout.textContent = `camera: ${cameraController.mode}`;
+
+      /* Once the player exists, try pointer lock again — loading is done
+         and any user gesture since page load has registered. */
+      if (!isTouchDevice) tryLockPointer();
     }
     if (InputState.toggleCamera) {
       const newMode = cameraController.toggleMode();
