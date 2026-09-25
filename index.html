@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>3D Character Controller - Three.js (Global Toon / Cel / Outline)</title>
 <style>
   html, body {
@@ -65,6 +65,11 @@
     position: absolute; left: 35px; top: 35px; width: 60px; height: 60px; border-radius: 50%;
     background: rgba(255, 255, 255, 0.55); border: 2px solid rgba(255, 255, 255, 0.8);
     box-sizing: border-box; transform: translate(0px, 0px);
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  #joystick-stick.running {
+    background: rgba(255, 225, 130, 0.75);
+    border-color: rgba(255, 235, 160, 0.95);
   }
   #action-zone {
     position: absolute; right: 30px; bottom: 30px; display: flex; flex-direction: column;
@@ -78,9 +83,27 @@
     box-sizing: border-box; text-align: center; line-height: 1.1;
   }
   .mobile-btn.active { background: rgba(255, 255, 255, 0.55); }
-  #run-btn { width: 60px; height: 60px; font-size: 11px; }
   #cam-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(255, 215, 100, 0.3); border-color: rgba(255, 215, 100, 0.6); }
   #use-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(120, 235, 150, 0.3); border-color: rgba(120, 235, 150, 0.65); }
+
+  /* Fallback prompt for devices where the orientation lock is not allowed
+     (mainly iOS). Shown only on coarse-pointer portrait screens. */
+  #rotate-overlay {
+    position: fixed; inset: 0; z-index: 300;
+    background: #10141a; color: #fff;
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 16px; text-align: center; padding: 24px;
+    font-size: 15px; letter-spacing: 0.02em;
+  }
+  #rotate-overlay .icon { font-size: 48px; line-height: 1; animation: rotateHint 2.2s ease-in-out infinite; }
+  @keyframes rotateHint {
+    0%, 35%   { transform: rotate(0deg); }
+    65%, 100% { transform: rotate(90deg); }
+  }
+  @media (orientation: portrait) and (pointer: coarse) {
+    #rotate-overlay { display: flex; }
+  }
 </style>
 <base target="_blank">
 </head>
@@ -103,6 +126,11 @@
   <div id="loading-error"></div>
 </div>
 
+<div id="rotate-overlay">
+  <div class="icon">📱</div>
+  <div>Rotate your device to landscape</div>
+</div>
+
 <div id="mobile-controls">
   <div id="joystick-zone">
     <div id="joystick-base"></div>
@@ -112,7 +140,6 @@
     <div id="cam-btn" class="mobile-btn">CAM</div>
     <div id="use-btn" class="mobile-btn">USE</div>
     <div id="jump-btn" class="mobile-btn">JUMP</div>
-    <div id="run-btn" class="mobile-btn">RUN</div>
   </div>
 </div>
 
@@ -140,6 +167,9 @@ const CONFIG = {
     alwaysShowMobileControls: true,
     /* Press this key to show/hide the touch controls at runtime. */
     toggleKey: 'KeyM',
+    /* How far the joystick must be pushed (0..1) before the character runs.
+       Replaces the old RUN button. */
+    joystickRunThreshold: 0.85,
   },
 
   paths: {
@@ -189,6 +219,15 @@ const CONFIG = {
     walkSpeed: 3.2,
     runMultiplier: 2.0,
     rotationSpeed: 12,
+
+    /* --- A / D (strafe + turn) feel ---------------------------------
+       These blend in based on how sideways the input is:
+         0.0 = same as pressing W / S
+         1.0 = same as pressing W / S (no reduction)
+       Lower numbers = slower sideways movement and slower turning. */
+    lateralSpeedMultiplier:    0.50,
+    lateralRotationMultiplier: 0.35,
+
     gravity: -20,
     jumpSpeed: 7.5,
     groundY: 0,
@@ -503,11 +542,20 @@ labelRenderer.domElement.style.pointerEvents = 'none';
 labelRenderer.domElement.style.zIndex = '15';
 document.body.appendChild(labelRenderer.domElement);
 
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+function onViewportResize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(w, h);
+  labelRenderer.setSize(w, h);
+}
+window.addEventListener('resize', onViewportResize);
+window.addEventListener('orientationchange', () => {
+  // Give the browser a moment to settle before re-measuring.
+  setTimeout(onViewportResize, 60);
+  setTimeout(onViewportResize, 350);
 });
 
 /* =====================================================================
@@ -597,12 +645,81 @@ window.addEventListener('keydown', (e) => {
 });
 /* ------------------------------------------------------------------- */
 
+/* =====================================================================
+   MOBILE FULLSCREEN + LANDSCAPE LOCK  (automatic)
+   ===================================================================== */
+const isMobileDevice =
+  isTouchDevice || /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent);
+
+let fullscreenKicked = false;
+
+async function enterFullscreenLandscape() {
+  if (fullscreenKicked) return;
+  fullscreenKicked = true;
+
+  /* 1) Fullscreen — must happen inside a user-gesture handler. */
+  try {
+    const el = document.documentElement;
+    const alreadyFs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!alreadyFs) {
+      const req =
+        el.requestFullscreen ||
+        el.webkitRequestFullscreen ||
+        el.webkitRequestFullScreen ||
+        el.msRequestFullscreen;
+      if (req) {
+        const p = req.call(el, { navigationUI: 'hide' });
+        if (p && typeof p.then === 'function') await p.catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('Fullscreen request was blocked:', err);
+  }
+
+  /* 2) Orientation lock to landscape (works on most Android browsers,
+         usually requires fullscreen first). */
+  try {
+    const so = screen.orientation;
+    if (so && typeof so.lock === 'function') {
+      await so.lock('landscape').catch(() => {});
+    } else if (typeof screen.lockOrientation === 'function') {
+      screen.lockOrientation('landscape');
+    } else if (typeof screen.mozLockOrientation === 'function') {
+      screen.mozLockOrientation('landscape');
+    } else if (typeof screen.msLockOrientation === 'function') {
+      screen.msLockOrientation('landscape');
+    }
+  } catch (err) {
+    console.warn('Orientation lock not available:', err);
+  }
+
+  onViewportResize();
+}
+
+if (isMobileDevice) {
+  const kickFullscreen = () => {
+    enterFullscreenLandscape();
+    window.removeEventListener('touchend', kickFullscreen);
+    window.removeEventListener('click', kickFullscreen);
+    window.removeEventListener('pointerup', kickFullscreen);
+  };
+  window.addEventListener('touchend', kickFullscreen, { passive: true });
+  window.addEventListener('pointerup', kickFullscreen, { passive: true });
+  window.addEventListener('click', kickFullscreen);
+
+  /* Re-lock if the user leaves fullscreen and comes back. */
+  document.addEventListener('fullscreenchange', () => {
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!fs) fullscreenKicked = false;
+    setTimeout(onViewportResize, 60);
+  });
+}
+
 const Joystick = { active: false, originX: 0, originY: 0, maxRadius: 45 };
 
 const joystickZone = document.getElementById('joystick-zone');
 const joystickStick = document.getElementById('joystick-stick');
 const jumpBtn = document.getElementById('jump-btn');
-const runBtn  = document.getElementById('run-btn');
 const camBtn  = document.getElementById('cam-btn');
 const useBtn  = document.getElementById('use-btn');
 
@@ -625,13 +742,20 @@ function joystickMove(clientX, clientY) {
   joystickStick.style.transform = `translate(${clampedX}px, ${clampedY}px)`;
   InputState.moveX = clampedX / Joystick.maxRadius;
   InputState.moveZ = -clampedY / Joystick.maxRadius;
+
+  /* No RUN button any more — pushing the stick to the edge runs. */
+  const magnitude = dist / Joystick.maxRadius;
+  InputState.run = magnitude >= CONFIG.ui.joystickRunThreshold;
+  joystickStick.classList.toggle('running', InputState.run);
 }
 function joystickEnd() {
   Joystick.active = false;
   joystickTouchId = null;
   joystickStick.style.transform = `translate(0px, 0px)`;
+  joystickStick.classList.remove('running');
   InputState.moveX = 0;
   InputState.moveZ = 0;
+  InputState.run = false;
 }
 
 joystickZone.addEventListener('touchstart', (e) => {
@@ -659,16 +783,16 @@ function bindHoldButton(el, onDown, onUp) {
   el.addEventListener('touchend',   (e) => { onUp();   el.classList.remove('active'); e.preventDefault(); }, { passive: false });
   el.addEventListener('touchcancel',(e) => { onUp();   el.classList.remove('active'); e.preventDefault(); }, { passive: false });
 
-  /* --- ADDED: mouse fallback so the buttons work on desktop too --- */
+  /* --- Mouse fallback so the buttons work on desktop too --- */
   el.addEventListener('mousedown', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); });
   window.addEventListener('mouseup', () => {
     if (el.classList.contains('active')) { onUp(); el.classList.remove('active'); }
   });
 }
 bindHoldButton(jumpBtn, () => { InputState.jumpPressed = true; }, () => {});
-bindHoldButton(runBtn,  () => { InputState.run = true; },        () => { InputState.run = false; });
 bindHoldButton(camBtn,  () => { InputState.toggleCamera = true; },() => {});
 bindHoldButton(useBtn,  () => { InputState.interactPressed = true; },() => {});
+/* RUN button removed — running now comes from pushing the joystick to the edge. */
 
 /* =====================================================================
    PICKUP ITEMS
@@ -1508,6 +1632,15 @@ class PlayerController {
     const isMoving = moveLenSq > 1e-6;
     if (isMoving) this._moveDir.normalize();
 
+    /* --- How sideways is the input? -------------------------------
+       1 = pure W / S          -> full speed, full turn rate
+       0 = pure A / D          -> reduced speed, reduced turn rate
+       Diagonals (W+A) blend smoothly between the two. */
+    const forwardness   = isMoving ? Math.abs(this._moveDir.dot(this._forward)) : 1;
+    const lateralAmount = 1 - forwardness;
+    const lateralSpeedMul = THREE.MathUtils.lerp(1, cfg.lateralSpeedMultiplier, lateralAmount);
+    const lateralTurnMul  = THREE.MathUtils.lerp(1, cfg.lateralRotationMultiplier, lateralAmount);
+
     let isBackward = false;
     if (isMoving &&
         this.cameraMode === 'third_person' &&
@@ -1516,7 +1649,7 @@ class PlayerController {
     }
     this.isBackward = isBackward;
 
-    let speed = cfg.walkSpeed;
+    let speed = cfg.walkSpeed * lateralSpeedMul;
     const isRunning = isMoving && input.run && !isBackward;
     if (isBackward) speed *= cfg.backwardSpeedMultiplier;
     else if (isRunning) speed *= cfg.runMultiplier;
@@ -1529,7 +1662,8 @@ class PlayerController {
       const fz = isBackward ? -this._moveDir.z : this._moveDir.z;
       const targetAngle = Math.atan2(fx, fz);
       this.facingAngle = rotateTowardsAngle(
-        this.facingAngle, targetAngle, cfg.rotationSpeed * delta
+        this.facingAngle, targetAngle,
+        cfg.rotationSpeed * lateralTurnMul * delta
       );
       this.root.rotation.y = this.facingAngle;
     }
