@@ -1,0 +1,1806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>3D Character Controller - Three.js (Global Toon / Cel / Outline)</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden;
+    width: 100%; height: 100%;
+    background: #87ceeb;
+    font-family: Arial, Helvetica, sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: none;
+  }
+  #app-canvas { display: block; width: 100%; height: 100%; }
+
+  #loading-screen {
+    position: fixed; inset: 0; background: #1a1a1a; color: #eee;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 100; transition: opacity 0.4s ease;
+  }
+  #loading-screen h2 { margin: 0 0 10px; font-size: 20px; }
+  #loading-screen p { margin: 4px 0; font-size: 13px; color: #aaa; max-width: 480px; text-align: center; line-height: 1.4; }
+  #loading-bar-track { width: 260px; height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 14px; }
+  #loading-bar-fill { height: 100%; width: 0%; background: #4caf50; transition: width 0.15s ease; }
+  #loading-error { color: #ff6b6b; font-size: 13px; margin-top: 14px; max-width: 500px; text-align: center; white-space: pre-line; }
+
+  #hud {
+    position: fixed; top: 10px; left: 10px; color: #fff; font-size: 12px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8); z-index: 10; pointer-events: none; line-height: 1.5;
+  }
+  #hud .hint { color: #ffe98a; }
+
+  .pickup-prompt-wrap { position: relative; pointer-events: none; }
+  .pickup-prompt {
+    display: flex; align-items: center; gap: 7px;
+    padding: 4px 11px 4px 5px;
+    background: rgba(12, 16, 24, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 999px;
+    color: #fff; font-size: 12px; font-weight: 600;
+    letter-spacing: 0.02em; white-space: nowrap;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    transform-origin: 50% 100%;
+    animation: promptBob 1.4s ease-in-out infinite;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  .pickup-prompt .key {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 21px; height: 21px; border-radius: 6px;
+    background: #ffffff; color: #12161c;
+    font-size: 12px; font-weight: 800;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.45), inset 0 -2px 0 rgba(0,0,0,0.18);
+  }
+  .pickup-prompt.hidden { opacity: 0; transform: translateY(6px) scale(0.9); }
+  @keyframes promptBob { 0%, 100% { margin-top: 0px; } 50% { margin-top: -5px; } }
+
+  #mobile-controls { position: fixed; inset: 0; z-index: 20; display: none; pointer-events: none; }
+  #joystick-zone { position: absolute; left: 30px; bottom: 30px; width: 130px; height: 130px; pointer-events: auto; }
+  #joystick-base {
+    position: absolute; width: 130px; height: 130px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.35); box-sizing: border-box;
+  }
+  #joystick-stick {
+    position: absolute; left: 35px; top: 35px; width: 60px; height: 60px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.55); border: 2px solid rgba(255, 255, 255, 0.8);
+    box-sizing: border-box; transform: translate(0px, 0px);
+  }
+  #action-zone {
+    position: absolute; right: 30px; bottom: 30px; display: flex; flex-direction: column;
+    gap: 14px; align-items: center; pointer-events: auto;
+  }
+  .mobile-btn {
+    width: 74px; height: 74px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25); border: 2px solid rgba(255, 255, 255, 0.5);
+    color: #fff; font-size: 12px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+    box-sizing: border-box; text-align: center; line-height: 1.1;
+  }
+  .mobile-btn.active { background: rgba(255, 255, 255, 0.55); }
+  #run-btn { width: 60px; height: 60px; font-size: 11px; }
+  #cam-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(255, 215, 100, 0.3); border-color: rgba(255, 215, 100, 0.6); }
+  #use-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(120, 235, 150, 0.3); border-color: rgba(120, 235, 150, 0.65); }
+</style>
+<base target="_blank">
+</head>
+<body>
+
+<canvas id="app-canvas"></canvas>
+
+<div id="hud">
+  <div>WASD / Arrows: Move &nbsp;|&nbsp; Shift: Run &nbsp;|&nbsp; Space: Jump</div>
+  <div><span class="hint">E</span>: Pick up / Drop (only one item can be carried)</div>
+  <div><span class="hint">C</span> / <span class="hint">V</span>: Toggle camera mode</div>
+  <div id="camera-readout">camera: third-person</div>
+  <div id="state-readout">state: idle</div>
+</div>
+
+<div id="loading-screen">
+  <h2>Loading Character...</h2>
+  <p>Fetching idle.fbx, run.fbx, jump.fbx, back.fbx and pickUp.fbx from ./character/</p>
+  <div id="loading-bar-track"><div id="loading-bar-fill"></div></div>
+  <div id="loading-error"></div>
+</div>
+
+<div id="mobile-controls">
+  <div id="joystick-zone">
+    <div id="joystick-base"></div>
+    <div id="joystick-stick"></div>
+  </div>
+  <div id="action-zone">
+    <div id="cam-btn" class="mobile-btn">CAM</div>
+    <div id="use-btn" class="mobile-btn">USE</div>
+    <div id="jump-btn" class="mobile-btn">JUMP</div>
+    <div id="run-btn" class="mobile-btn">RUN</div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+/* =====================================================================
+   CONFIG
+   ===================================================================== */
+const CONFIG = {
+  ui: {
+    /* Force the touch controls on even on a desktop / non-touch device.
+       Set to false to go back to auto-detection only. */
+    alwaysShowMobileControls: true,
+    /* Press this key to show/hide the touch controls at runtime. */
+    toggleKey: 'KeyM',
+  },
+
+  paths: {
+    idle:   './character/idle.fbx',
+    run:    './character/run.fbx',
+    jump:   './character/jump.fbx',
+    pickup: './character/pickUp.fbx',
+    back:   './character/back.fbx',
+  },
+
+  clipNameOverride: { idle: null, run: null, jump: null, pickup: null, back: null },
+
+  toon: {
+    enabled: true,
+    gradientSteps: 3,
+    outlineEnabled: true,
+    outlineThickness: 0.012,
+    outlineColor: 0x000000,
+  },
+
+  character: {
+    autoScale: true,
+    targetHeight: 1.8,
+    manualScale: 0.01,
+    forceDoubleSide: false,
+
+    colors: {
+      enabled: true,
+      replaceTextures: false,
+      hair:     0x2b1d16,
+      body:     0xe8b48c,
+      shirt:    0x3a7bd5,
+      shorts:   0x2f3542,
+      slippers: 0xd94f4f,
+    },
+
+    colorParts: [
+      { key: 'slippers', words: ['slipper', 'slip', 'shoe', 'sandal', 'boot'] },
+      { key: 'shorts',   words: ['short', 'pant', 'trouser', 'jean'] },
+      { key: 'shirt',    words: ['shirt', 'tshirt', 'top', 'jacket', 'hoodie'] },
+      { key: 'hair',     words: ['hair', 'beard', 'brow'] },
+      { key: 'body',     words: ['body', 'skin', 'head', 'arm', 'leg', 'hand', 'face'] },
+    ],
+  },
+
+  movement: {
+    walkSpeed: 3.2,
+    runMultiplier: 2.0,
+    rotationSpeed: 12,
+    gravity: -20,
+    jumpSpeed: 7.5,
+    groundY: 0,
+    backwardSpeedMultiplier: 0.75,
+    backwardDotThreshold:   -0.5,
+  },
+
+  camera: {
+    distance: 4.5, height: 2.4, lookHeightFactor: 0.55,
+    followLerp: 7, lookLerp: 8,
+    birdHeightFactor: 4.5, birdDistanceFactor: 3.2,
+    birdFollowLerp: 9, birdLookLerp: 9,
+  },
+
+  animation: {
+    idleRunFade: 0.30,
+    backFade:    0.25,
+    jumpFadeIn:  0.10, jumpFadeOut: 0.25,
+    pickupFadeIn: 0.18, pickupFadeOut: 0.30,
+    useWarping: true,
+  },
+
+  pickup: {
+    enabled: true,
+    reachDistance: 1.75,
+    promptOffsetY: 0.42,
+    alignSpeed: 3.0,
+    alignTurnSpeed: 9.0,
+    alignTimeout: 1.6,
+    positionTolerance: 0.06,
+    angleTolerance: 0.16,
+    defaultReach: 0.45,
+    ikFadeIn: 0.30, ikFadeOut: 0.35,
+    ikIterations: 8, ikMaxStep: 0.30,
+    gripFraction: 2.1,
+    minGripDistance: 0.06,
+    fingerSearchDepth: 5,
+    fallbackGripOffset: 0.10,
+
+    holdOffset: { x: 0.080, y: -0.005, z: 0.035 },
+    holdRotation: { x: 87, y: 12, z: 180 },
+
+    handBoneTiers: [
+      ['righthand', 'handright', 'wrighthand', 'rhand', 'handr',
+       'bip01rhand', 'biprhand', 'handr02', 'handr2'],
+      ['hand', 'hand02', 'hand2'],
+    ],
+    chainStopPattern: /(spine|chest|hips|hip|root|neck|head|pelvis|clavicle|shoulder)/,
+  },
+
+  debug: { showHelpers: false, showGripPoint: false },
+};
+
+/* =====================================================================
+   ROOT-MOTION STRIPPER
+   ===================================================================== */
+const ROOT_BONE_RE = /(root|hips|pelvis|bip01)/;
+
+function stripHorizontalRootMotion(clip) {
+  if (!clip || !clip.tracks) return;
+  for (const track of clip.tracks) {
+    const dot = track.name.lastIndexOf('.');
+    if (dot < 0) continue;
+    if (track.name.slice(dot + 1) !== 'position') continue;
+
+    const boneName = track.name.slice(0, dot)
+      .toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!ROOT_BONE_RE.test(boneName)) continue;
+
+    const v = track.values;
+    if (!v || v.length < 6) continue;
+    const x0 = v[0];
+    const z0 = v[2];
+    for (let i = 0; i < v.length; i += 3) {
+      v[i]     = x0;
+      v[i + 2] = z0;
+    }
+  }
+}
+
+/* =====================================================================
+   RENDERER / SCENE / LIGHTS
+   ===================================================================== */
+const canvas = document.getElementById('app-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 60, 180);
+
+const camera = new THREE.PerspectiveCamera(
+  60, window.innerWidth / window.innerHeight, 0.1, 2000
+);
+camera.position.set(0, 3, 6);
+camera.lookAt(0, 1, 0);
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+scene.add(ambientLight);
+
+const hemiLight = new THREE.HemisphereLight(0xbfd9ff, 0x4a6b3a, 0.85);
+hemiLight.position.set(0, 20, 0);
+scene.add(hemiLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+dirLight.position.set(8, 15, 8);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(2048, 2048);
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 80;
+dirLight.shadow.camera.left = -25;
+dirLight.shadow.camera.right = 25;
+dirLight.shadow.camera.top = 25;
+dirLight.shadow.camera.bottom = -25;
+scene.add(dirLight);
+
+/* =====================================================================
+   GLOBAL TOON GRAPHICS SYSTEM
+   ===================================================================== */
+scene.userData.__isScene = true;
+
+function makeToonGradientMap(steps) {
+  const n = Math.max(2, Math.floor(steps));
+  const data = new Uint8Array(n);
+  for (let i = 0; i < n; i++) data[i] = Math.round((i / (n - 1)) * 255);
+  const tex = new THREE.DataTexture(data, n, 1, THREE.RedFormat);
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+const TOON_GRADIENT = makeToonGradientMap(CONFIG.toon.gradientSteps);
+
+function makeToonMaterial(opts = {}) {
+  if (!CONFIG.toon.enabled) {
+    return new THREE.MeshStandardMaterial({
+      color: opts.color !== undefined ? opts.color : 0xffffff,
+      map: opts.map || null,
+      roughness: 0.85, metalness: 0.0,
+      side: opts.side !== undefined ? opts.side : THREE.FrontSide,
+      transparent: !!opts.transparent,
+      opacity: opts.opacity !== undefined ? opts.opacity : 1,
+    });
+  }
+  const mat = new THREE.MeshToonMaterial({
+    color: opts.color !== undefined ? opts.color : 0xffffff,
+    gradientMap: TOON_GRADIENT,
+    side: opts.side !== undefined ? opts.side : THREE.FrontSide,
+    transparent: !!opts.transparent,
+    opacity: opts.opacity !== undefined ? opts.opacity : 1,
+    fog: true,
+  });
+  if (opts.map) mat.map = opts.map;
+  return mat;
+}
+
+function createOutlineMaterial(thickness) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: CONFIG.toon.outlineColor,
+    side: THREE.BackSide,
+    fog: true,
+    toneMapped: false,
+  });
+
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uOutlineThickness = { value: thickness };
+
+    shader.vertexShader =
+      'uniform float uOutlineThickness;\n' + shader.vertexShader;
+
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <skinning_vertex>',
+      [
+        '#include <skinning_vertex>',
+        '#ifdef USE_SKINNING',
+        '  transformed += normalize( objectNormal ) * uOutlineThickness;',
+        '#else',
+        '  transformed += normalize( normal ) * uOutlineThickness;',
+        '#endif',
+      ].join('\n')
+    );
+  };
+
+  mat.customProgramCacheKey = () => 'global-toon-outline-v2';
+  return mat;
+}
+
+function addOutline(mesh, worldThickness) {
+  if (!mesh || (!mesh.isMesh && !mesh.isSkinnedMesh)) return null;
+  if (mesh.userData.__hasOutline) return null;
+  if (!mesh.parent) return null;
+  if (mesh.userData.__skipOutline) return null;
+
+  const ws = new THREE.Vector3();
+  mesh.getWorldScale(ws);
+  const avgScale = (Math.abs(ws.x) + Math.abs(ws.y) + Math.abs(ws.z)) / 3 || 1;
+  const localThickness = worldThickness / avgScale;
+
+  const outline = mesh.clone(false);
+  outline.material = createOutlineMaterial(localThickness);
+  outline.name = (mesh.name || 'mesh') + '_outline';
+  outline.castShadow = false;
+  outline.receiveShadow = false;
+  outline.frustumCulled = false;
+  outline.userData.__isOutline = true;
+
+  mesh.parent.add(outline);
+  mesh.userData.__hasOutline = true;
+  return outline;
+}
+
+function applyToonGraphics(root) {
+  if (!CONFIG.toon.enabled || !root) return;
+  if (root.userData.__isOutline) return;
+  if (root.userData.__skipToon) return;
+
+  const meshes = [];
+  root.traverse((o) => {
+    if ((o.isMesh || o.isSkinnedMesh) &&
+        !o.userData.__isOutline &&
+        !o.userData.__skipToon) {
+      meshes.push(o);
+    }
+  });
+  if (meshes.length === 0) return;
+
+  for (const mesh of meshes) {
+    if (mesh.userData.__toonified) continue;
+    const isArray = Array.isArray(mesh.material);
+    const mats = isArray ? mesh.material : [mesh.material];
+
+    const newMats = mats.map((mat) => {
+      if (!mat) return mat;
+      if (mat.isMeshToonMaterial) return mat;
+      const colorHex = mat.color ? mat.color.getHex() : 0xffffff;
+      return makeToonMaterial({
+        color: colorHex,
+        map: mat.map || null,
+        side: mat.side !== undefined ? mat.side : THREE.FrontSide,
+        transparent: !!mat.transparent,
+        opacity: mat.opacity !== undefined ? mat.opacity : 1,
+      });
+    });
+
+    mesh.material = isArray ? newMats : newMats[0];
+    mesh.userData.__toonified = true;
+  }
+
+  if (CONFIG.toon.outlineEnabled) {
+    for (const mesh of meshes) addOutline(mesh, CONFIG.toon.outlineThickness);
+  }
+}
+
+const _originalObjectAdd = THREE.Object3D.prototype.add;
+THREE.Object3D.prototype.add = function (...objects) {
+  const result = _originalObjectAdd.apply(this, objects);
+
+  let p = this;
+  while (p && !p.userData.__isScene) p = p.parent;
+  if (p) {
+    for (const obj of objects) {
+      if (obj && obj.isObject3D) applyToonGraphics(obj);
+    }
+  }
+  return result;
+};
+
+/* ---- Ground --------------------------------------------------------- */
+const groundGeo = new THREE.PlaneGeometry(400, 400);
+const groundMat = makeToonMaterial({ color: 0x6fae5e });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.userData.__skipOutline = true;
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = CONFIG.movement.groundY;
+ground.receiveShadow = true;
+scene.add(ground);
+
+if (CONFIG.debug.showHelpers) {
+  const axesHelper = new THREE.AxesHelper(2);
+  axesHelper.position.set(0, 0.02, 0);
+  axesHelper.userData.__skipToon = true;
+  scene.add(axesHelper);
+}
+
+const markerGeo = new THREE.ConeGeometry(0.25, 0.9, 8);
+const markerMat = new THREE.MeshStandardMaterial({ color: 0xff5555 });
+const markerPositions = [
+  [5, 5], [-5, 5], [5, -5], [-5, -5],
+  [10, 0], [-10, 0], [0, 10], [0, -10],
+];
+for (const [x, z] of markerPositions) {
+  const marker = new THREE.Mesh(markerGeo, markerMat.clone());
+  marker.position.set(x, 0.45, z);
+  marker.castShadow = true;
+  scene.add(marker);
+}
+
+/* =====================================================================
+   CSS2D label renderer (floating "E" prompts)
+   ===================================================================== */
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0px';
+labelRenderer.domElement.style.left = '0px';
+labelRenderer.domElement.style.pointerEvents = 'none';
+labelRenderer.domElement.style.zIndex = '15';
+document.body.appendChild(labelRenderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* =====================================================================
+   BOUNDS HELPER
+   ===================================================================== */
+function computeBounds(root) {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const invalid =
+    box.isEmpty() ||
+    !isFinite(box.min.x) || !isFinite(box.min.y) || !isFinite(box.min.z) ||
+    !isFinite(box.max.x) || !isFinite(box.max.y) || !isFinite(box.max.z);
+  if (invalid) {
+    box.makeEmpty();
+    root.traverse((obj) => {
+      if (obj.isMesh && obj.geometry) {
+        if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+        if (obj.geometry.boundingBox) {
+          box.union(obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld));
+        }
+      }
+    });
+  }
+  return box;
+}
+function logVec(label, v) {
+  console.log(`${label}: x=${v.x.toFixed(4)}, y=${v.y.toFixed(4)}, z=${v.z.toFixed(4)}`);
+}
+
+/* =====================================================================
+   INPUT MANAGER
+   ===================================================================== */
+const InputState = {
+  moveX: 0, moveZ: 0, run: false,
+  jumpPressed: false, toggleCamera: false, interactPressed: false,
+};
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') e.preventDefault();
+  keys[e.code] = true;
+});
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+function readKeyboardInto(input) {
+  let x = 0, z = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) z += 1;
+  if (keys['KeyS'] || keys['ArrowDown']) z -= 1;
+  if (keys['KeyA'] || keys['ArrowLeft']) x -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) x += 1;
+
+  if (!Joystick.active) {
+    input.moveX = x;
+    input.moveZ = z;
+    input.run = !!keys['ShiftLeft'] || !!keys['ShiftRight'];
+  }
+
+  if (keys['Space'] && !input._spaceHeldLastFrame) input.jumpPressed = true;
+  input._spaceHeldLastFrame = !!keys['Space'];
+
+  if (keys['KeyE'] && !input._eHeldLastFrame) input.interactPressed = true;
+  input._eHeldLastFrame = !!keys['KeyE'];
+
+  const camHeld = !!(keys['KeyC'] || keys['KeyV']);
+  if (camHeld && !input._camHeldLastFrame) input.toggleCamera = true;
+  input._camHeldLastFrame = camHeld;
+}
+
+/* =====================================================================
+   MOBILE CONTROLS
+   ===================================================================== */
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+/* --- CHANGED: controls now show on desktop too --------------------- */
+const mobileControlsEl = document.getElementById('mobile-controls');
+const showTouchControls = () => { mobileControlsEl.style.display = 'block'; };
+const hideTouchControls = () => {
+  mobileControlsEl.style.display = 'none';
+  joystickEnd();            // make sure we don't leave a stuck input
+  InputState.run = false;
+};
+if (CONFIG.ui.alwaysShowMobileControls || isTouchDevice) showTouchControls();
+
+window.addEventListener('keydown', (e) => {
+  if (e.code !== CONFIG.ui.toggleKey) return;
+  if (mobileControlsEl.style.display === 'none') showTouchControls();
+  else hideTouchControls();
+});
+/* ------------------------------------------------------------------- */
+
+const Joystick = { active: false, originX: 0, originY: 0, maxRadius: 45 };
+
+const joystickZone = document.getElementById('joystick-zone');
+const joystickStick = document.getElementById('joystick-stick');
+const jumpBtn = document.getElementById('jump-btn');
+const runBtn  = document.getElementById('run-btn');
+const camBtn  = document.getElementById('cam-btn');
+const useBtn  = document.getElementById('use-btn');
+
+let joystickTouchId = null;
+
+function joystickStart(clientX, clientY) {
+  const rect = joystickZone.getBoundingClientRect();
+  Joystick.originX = rect.left + rect.width / 2;
+  Joystick.originY = rect.top + rect.height / 2;
+  Joystick.active = true;
+  joystickMove(clientX, clientY);
+}
+function joystickMove(clientX, clientY) {
+  const dx = clientX - Joystick.originX;
+  const dy = clientY - Joystick.originY;
+  const dist = Math.min(Math.sqrt(dx * dx + dy * dy), Joystick.maxRadius);
+  const angle = Math.atan2(dy, dx);
+  const clampedX = Math.cos(angle) * dist;
+  const clampedY = Math.sin(angle) * dist;
+  joystickStick.style.transform = `translate(${clampedX}px, ${clampedY}px)`;
+  InputState.moveX = clampedX / Joystick.maxRadius;
+  InputState.moveZ = -clampedY / Joystick.maxRadius;
+}
+function joystickEnd() {
+  Joystick.active = false;
+  joystickTouchId = null;
+  joystickStick.style.transform = `translate(0px, 0px)`;
+  InputState.moveX = 0;
+  InputState.moveZ = 0;
+}
+
+joystickZone.addEventListener('touchstart', (e) => {
+  const t = e.changedTouches[0];
+  joystickTouchId = t.identifier;
+  joystickStart(t.clientX, t.clientY);
+  e.preventDefault();
+}, { passive: false });
+joystickZone.addEventListener('touchmove', (e) => {
+  for (const t of e.changedTouches) if (t.identifier === joystickTouchId) joystickMove(t.clientX, t.clientY);
+  e.preventDefault();
+}, { passive: false });
+joystickZone.addEventListener('touchend', (e) => {
+  for (const t of e.changedTouches) if (t.identifier === joystickTouchId) joystickEnd();
+}, { passive: false });
+joystickZone.addEventListener('touchcancel', joystickEnd);
+
+let mouseJoystickDown = false;
+joystickZone.addEventListener('mousedown', (e) => { mouseJoystickDown = true; joystickStart(e.clientX, e.clientY); e.preventDefault(); });
+window.addEventListener('mousemove', (e) => { if (mouseJoystickDown) joystickMove(e.clientX, e.clientY); });
+window.addEventListener('mouseup', () => { if (mouseJoystickDown) { mouseJoystickDown = false; joystickEnd(); } });
+
+function bindHoldButton(el, onDown, onUp) {
+  el.addEventListener('touchstart', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); }, { passive: false });
+  el.addEventListener('touchend',   (e) => { onUp();   el.classList.remove('active'); e.preventDefault(); }, { passive: false });
+  el.addEventListener('touchcancel',(e) => { onUp();   el.classList.remove('active'); e.preventDefault(); }, { passive: false });
+
+  /* --- ADDED: mouse fallback so the buttons work on desktop too --- */
+  el.addEventListener('mousedown', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); });
+  window.addEventListener('mouseup', () => {
+    if (el.classList.contains('active')) { onUp(); el.classList.remove('active'); }
+  });
+}
+bindHoldButton(jumpBtn, () => { InputState.jumpPressed = true; }, () => {});
+bindHoldButton(runBtn,  () => { InputState.run = true; },        () => { InputState.run = false; });
+bindHoldButton(camBtn,  () => { InputState.toggleCamera = true; },() => {});
+bindHoldButton(useBtn,  () => { InputState.interactPressed = true; },() => {});
+
+/* =====================================================================
+   PICKUP ITEMS
+   ===================================================================== */
+const PICKUP_SPOTS = [
+  { pos: new THREE.Vector3( 2.6, 0,  2.2), color: 0xffcc33 },
+  { pos: new THREE.Vector3(-3.4, 0,  1.0), color: 0x5fd0ff },
+  { pos: new THREE.Vector3( 1.0, 0, -4.2), color: 0xff8ad6 },
+];
+
+let pickedCount = 0;
+
+class PickupItem {
+  constructor(position, color) {
+    this.taken = false;
+    this.held = false;
+    this.frozen = false;
+    this.velocity = new THREE.Vector3();
+    this.angularVelocity = new THREE.Vector3();
+    this.resting = true;
+
+    const geo = new THREE.BoxGeometry(0.30, 0.06, 0.15);
+    const mat = new THREE.MeshStandardMaterial({
+      color, roughness: 0.8, metalness: 0.05,
+    });
+
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.castShadow = true;
+
+    geo.computeBoundingBox();
+    const bboxSize = geo.boundingBox.getSize(new THREE.Vector3());
+    this._halfExtents = new THREE.Vector3(bboxSize.x / 2, bboxSize.y / 2, bboxSize.z / 2);
+    this.halfHeight = this._halfExtents.y;
+    this.mesh.rotation.y = Math.random() * Math.PI;
+
+    this.group = new THREE.Group();
+    this.group.position.set(position.x, this.halfHeight, position.z);
+    this.group.add(this.mesh);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'pickup-prompt-wrap';
+    const inner = document.createElement('div');
+    inner.className = 'pickup-prompt hidden';
+    inner.innerHTML = '<span class="key">E</span><span class="txt">Pick up</span>';
+    wrap.appendChild(inner);
+    this.promptEl = inner;
+
+    this.prompt = new CSS2DObject(wrap);
+    this.prompt.position.set(0, this.halfHeight + CONFIG.pickup.promptOffsetY, 0);
+    this.group.add(this.prompt);
+
+    scene.add(this.group);
+  }
+
+  _groundClearance() {
+    const q = this.group.quaternion;
+    const e = this._halfExtents;
+    let minY = Infinity;
+    for (let i = 0; i < 8; i++) {
+      _corner.set(
+        (i & 1 ? 1 : -1) * e.x,
+        (i & 2 ? 1 : -1) * e.y,
+        (i & 4 ? 1 : -1) * e.z
+      ).applyQuaternion(q);
+      if (_corner.y < minY) minY = _corner.y;
+    }
+    return -minY;
+  }
+
+  update(delta) {
+    if (this.taken || this.held || this.resting) return;
+    this.velocity.y += CONFIG.movement.gravity * delta;
+    this.group.position.addScaledVector(this.velocity, delta);
+    this.group.rotation.x += this.angularVelocity.x * delta;
+    this.group.rotation.y += this.angularVelocity.y * delta;
+    this.group.rotation.z += this.angularVelocity.z * delta;
+
+    const clearance = this._groundClearance();
+    if (this.group.position.y > clearance) return;
+    this.group.position.y = clearance;
+
+    if (Math.abs(this.velocity.y) > 1.2) {
+      this.velocity.y *= -0.32;
+      this.velocity.x *= 0.55; this.velocity.z *= 0.55;
+      this.angularVelocity.multiplyScalar(0.55);
+      this.group.rotation.x *= 0.5; this.group.rotation.z *= 0.5;
+    } else {
+      this.velocity.set(0, 0, 0);
+      this.angularVelocity.set(0, 0, 0);
+      this.group.rotation.set(0, this.group.rotation.y, 0);
+      this.group.position.y = this.halfHeight;
+      this.resting = true;
+    }
+  }
+
+  toss(dirX, dirZ, upSpeed = 3.2, spin = 1) {
+    this.resting = false;
+    this.velocity.set(dirX, upSpeed, dirZ);
+    this.angularVelocity.set(
+      (Math.random() - 0.5) * 7 * spin,
+      (Math.random() - 0.5) * 5 * spin,
+      (Math.random() - 0.5) * 7 * spin
+    );
+  }
+
+  setPromptVisible(v) { this.promptEl.classList.toggle('hidden', !v); }
+}
+
+class PickupManager {
+  constructor() { this.items = []; this.active = null; this.enabled = false; }
+  populate() {
+    for (const spot of PICKUP_SPOTS) this.items.push(new PickupItem(spot.pos, spot.color));
+    this.enabled = true;
+  }
+  update(delta, elapsed, player) {
+    if (!this.enabled) return;
+    for (const it of this.items) it.update(delta, elapsed);
+    if (!player || !player.canPickup()) { this.setActive(null); return; }
+
+    let best = null, bestD = Infinity;
+    const p = player.root.position;
+    const tmp = _v3a;
+    for (const it of this.items) {
+      if (it.taken || it.held) continue;
+      it.mesh.getWorldPosition(tmp);
+      const d = Math.hypot(tmp.x - p.x, tmp.z - p.z);
+      if (d < bestD) { bestD = d; best = it; }
+    }
+    this.setActive(bestD <= CONFIG.pickup.reachDistance ? best : null);
+  }
+  setActive(item) {
+    if (this.active === item) return;
+    if (this.active) { this.active.setPromptVisible(false); this.active.frozen = false; }
+    this.active = item;
+    if (item) { item.setPromptVisible(true); item.frozen = true; }
+  }
+}
+const pickupManager = new PickupManager();
+const _v3a = new THREE.Vector3();
+const _corner = new THREE.Vector3();
+
+/* =====================================================================
+   CHARACTER LOADING
+   ===================================================================== */
+const loadingScreen = document.getElementById('loading-screen');
+const loadingBarFill = document.getElementById('loading-bar-fill');
+const loadingErrorEl = document.getElementById('loading-error');
+const loader = new FBXLoader();
+
+function loadFBX(path, label, onProgressTotal) {
+  return new Promise((resolve, reject) => {
+    loader.load(
+      path,
+      (fbx) => resolve(fbx),
+      (xhr) => { if (xhr.total) onProgressTotal(label, xhr.loaded / xhr.total); },
+      (err) => reject(new Error(`Failed to load ${path}: ${err.message || err}`))
+    );
+  });
+}
+
+const loadProgress = { idle: 0, run: 0, jump: 0, pickup: 0, back: 0 };
+function updateLoadingBar() {
+  const keysArr = Object.keys(loadProgress);
+  let sum = 0; for (const k of keysArr) sum += loadProgress[k];
+  loadingBarFill.style.width = `${Math.round((sum / keysArr.length) * 100)}%`;
+}
+
+function pickClip(source, key) {
+  const override = CONFIG.clipNameOverride[key];
+  if (override) {
+    const found = source.animations.find((c) => c.name === override);
+    if (found) return found;
+    console.warn(`Clip "${override}" not found in ${key}.fbx, falling back to animations[0].`);
+  }
+  if (!source.animations || source.animations.length === 0) throw new Error(`${key}.fbx has no animation clips.`);
+  return source.animations[0];
+}
+
+let characterRoot = null;
+let characterInfo = null;
+let player = null;
+let armIK = null;
+
+function normalizeCharacter(model) {
+  model.position.set(0, 0, 0);
+  model.rotation.set(0, 0, 0);
+  model.scale.set(1, 1, 1);
+  model.updateMatrixWorld(true);
+
+  const rawBox = computeBounds(model);
+  const rawSize = rawBox.getSize(new THREE.Vector3());
+  const rawCenter = rawBox.getCenter(new THREE.Vector3());
+
+  console.log('=== RAW FBX BOUNDS (before scaling) ===');
+  logVec('  raw size  ', rawSize);
+  logVec('  raw center', rawCenter);
+
+  let scale = CONFIG.character.manualScale;
+  if (CONFIG.character.autoScale) {
+    const rawHeight = rawSize.y;
+    if (isFinite(rawHeight) && rawHeight > 1e-6) {
+      scale = THREE.MathUtils.clamp(CONFIG.character.targetHeight / rawHeight, 1e-6, 1e6);
+      console.log(`AUTO-SCALE: raw height ${rawHeight.toFixed(4)} -> target ${CONFIG.character.targetHeight} => scale ${scale}`);
+    }
+  }
+  model.scale.setScalar(scale);
+  model.updateMatrixWorld(true);
+
+  const scaledBox = computeBounds(model);
+  const scaledSize = scaledBox.getSize(new THREE.Vector3());
+  const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+
+  console.log('=== SCALED FBX BOUNDS ===');
+  logVec('  scaled size  ', scaledSize);
+  logVec('  scaled center', scaledCenter);
+
+  model.position.set(-scaledCenter.x, -scaledBox.min.y, -scaledCenter.z);
+  model.updateMatrixWorld(true);
+
+  const finalBox = computeBounds(model);
+  const finalSize = finalBox.getSize(new THREE.Vector3());
+  const finalCenter = finalBox.getCenter(new THREE.Vector3());
+
+  console.log('=== FINAL (GROUNDED) BOUNDS ===');
+  logVec('  final size  ', finalSize);
+  logVec('  final center', finalCenter);
+  console.log(`  feet are at Y = ${finalBox.min.y.toFixed(4)} (should be 0.0000)`);
+
+  return { height: Math.max(finalSize.y, 0.0001), size: finalSize, center: finalCenter, scale, box: finalBox };
+}
+
+/* ---- CHARACTER COLOURS → TOON MATERIALS ---------------------------- */
+function normalizePartName(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function detectCharacterPart(mesh, material) {
+  const candidates = [
+    normalizePartName(mesh.name),
+    normalizePartName(material && material.name),
+    normalizePartName(mesh.parent && mesh.parent.name),
+  ].filter(Boolean);
+  for (const part of CONFIG.character.colorParts) {
+    for (const word of part.words) {
+      if (candidates.some((n) => n.includes(word))) return part.key;
+    }
+  }
+  return null;
+}
+function applyCharacterColors(model) {
+  const cfg = CONFIG.character.colors;
+
+  const inventory = [];
+  model.traverse((obj) => {
+    if (!obj.isMesh && !obj.isSkinnedMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    inventory.push(
+      `mesh "${obj.name}" [parent "${obj.parent ? obj.parent.name : '-'}"] ` +
+      `materials: ${mats.map((m) => (m ? `"${m.name}"` : 'null')).join(', ')}`
+    );
+  });
+  console.log('%cCHARACTER MESH / MATERIAL INVENTORY', 'color:#4caf50;font-weight:bold;');
+  for (const line of inventory) console.log('  ' + line);
+
+  if (!cfg || !cfg.enabled) return;
+  if (!Array.isArray(CONFIG.character.colorParts)) return;
+
+  const partColor = {
+    hair: cfg.hair, body: cfg.body, shirt: cfg.shirt,
+    shorts: cfg.shorts, slippers: cfg.slippers,
+  };
+  const counts = {};
+  const unmatched = [];
+
+  model.traverse((obj) => {
+    if (!obj.isMesh && !obj.isSkinnedMesh) return;
+    if (obj.userData.__isOutline) return;
+
+    const isArray = Array.isArray(obj.material);
+    const mats = isArray ? obj.material : [obj.material];
+
+    const newMats = mats.map((mat) => {
+      if (!mat) return mat;
+      const part = detectCharacterPart(obj, mat);
+      const hex = part ? partColor[part] : undefined;
+      if (!part) unmatched.push(obj.name || '(unnamed mesh)');
+
+      const sourceColor =
+        (hex !== null && hex !== undefined)
+          ? hex
+          : (mat.color ? mat.color.getHex() : 0xffffff);
+      const keptMap = cfg.replaceTextures ? null : (mat.map || null);
+
+      const m = makeToonMaterial({
+        color: sourceColor,
+        map: keptMap,
+        side: CONFIG.character.forceDoubleSide ? THREE.DoubleSide : THREE.FrontSide,
+      });
+      if (part) counts[part] = (counts[part] || 0) + 1;
+      return m;
+    });
+
+    obj.material = isArray ? newMats : newMats[0];
+    obj.userData.__toonified = true;
+  });
+
+  console.log('CHARACTER COLORS APPLIED (toon):', counts);
+  if (unmatched.length) {
+    console.warn(
+      'CHARACTER COLORS: could not classify these meshes ' +
+      '(add keywords to CONFIG.character.colorParts):',
+      [...new Set(unmatched)]
+    );
+  }
+}
+
+/* ---- BONE AUTO-DETECTION ---- */
+function normalizeBoneName(name) { return String(name).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function handSide(n) {
+  if (/left/.test(n))  return 'left';
+  if (/right/.test(n)) return 'right';
+  if (/handl$/.test(n) || /lhand$/.test(n)) return 'left';
+  if (/handr$/.test(n) || /rhand$/.test(n)) return 'right';
+  return 'unknown';
+}
+function findBone(root, tiers) {
+  const bones = [];
+  root.traverse((o) => { if (o.isBone) bones.push(o); });
+  const NOT_A_HAND_RE = /thumb|index|middle|ring|pinky|finger|forearm|lowerarm|upperarm|shoulder|clavicle/i;
+  let best = null, bestScore = -Infinity;
+  for (const bone of bones) {
+    const n = normalizeBoneName(bone.name);
+    let score = 0;
+    for (let t = 0; t < tiers.length; t++) {
+      const tier = tiers[t];
+      for (let i = 0; i < tier.length; i++) {
+        if (n.includes(tier[i])) {
+          score = Math.max(score, (tiers.length - t) * 100 + (tier.length - i) * 10);
+          break;
+        }
+      }
+    }
+    if (score <= 0) continue;
+    const side = handSide(n);
+    if (side === 'right') score += 1000;
+    if (side === 'left')  score -= 1000;
+    if (NOT_A_HAND_RE.test(n)) score -= 300;
+    if (score > bestScore) { bestScore = score; best = bone; }
+  }
+  if (best) {
+    const n = normalizeBoneName(best.name);
+    console.log(`PICKUP: hand bone -> "${best.name}" (normalized="${n}", side=${handSide(n)}, score=${bestScore})`);
+  } else {
+    console.warn('PICKUP: no hand bone matched — tune CONFIG.pickup.handBoneTiers.');
+  }
+  return best;
+}
+function buildArmChain(handBone) {
+  const chain = [];
+  let b = handBone.parent;
+  while (b && b.isBone && chain.length < 3) {
+    const n = normalizeBoneName(b.name);
+    if (CONFIG.pickup.chainStopPattern.test(n)) break;
+    chain.push(b);
+    b = b.parent;
+  }
+  return chain;
+}
+function findFingertips(handBone, maxDepth) {
+  const tips = [];
+  const queue = [{ bone: handBone, depth: 0 }];
+  while (queue.length) {
+    const { bone, depth } = queue.shift();
+    const boneChildren = bone.children.filter((c) => c.isBone);
+    if (depth > 0 && boneChildren.length === 0) { tips.push(bone); continue; }
+    if (depth >= maxDepth) continue;
+    for (const c of boneChildren) queue.push({ bone: c, depth: depth + 1 });
+  }
+  return tips;
+}
+function computeFingertipLocalOffset(handBone) {
+  handBone.updateWorldMatrix(true, true);
+  const wristWorld = new THREE.Vector3();
+  handBone.getWorldPosition(wristWorld);
+  const tips = findFingertips(handBone, CONFIG.pickup.fingerSearchDepth);
+  let fingersWorld = null;
+  if (tips.length > 0) {
+    const tmp = new THREE.Vector3(); const sum = new THREE.Vector3();
+    for (const tip of tips) { tip.getWorldPosition(tmp); sum.add(tmp); }
+    sum.divideScalar(tips.length);
+    fingersWorld = sum;
+    console.log(`PICKUP: found ${tips.length} fingertip bone(s): ` + tips.map((t) => t.name).join(', '));
+  } else {
+    const firstBoneChild = handBone.children.find((c) => c.isBone);
+    if (firstBoneChild) {
+      const cw = new THREE.Vector3();
+      firstBoneChild.getWorldPosition(cw);
+      fingersWorld = cw;
+      console.warn('PICKUP: no fingertip leaf bones found — using hand\'s first bone child ' + `("${firstBoneChild.name}") as the finger direction.`);
+    }
+  }
+  const directionWorld = new THREE.Vector3();
+  if (fingersWorld) directionWorld.subVectors(fingersWorld, wristWorld);
+  if (directionWorld.lengthSq() < 1e-10) {
+    const handQuat = new THREE.Quaternion();
+    handBone.getWorldQuaternion(handQuat);
+    directionWorld.set(0, 1, 0).applyQuaternion(handQuat);
+  }
+  if (directionWorld.lengthSq() < 1e-10) directionWorld.set(0, 1, 0);
+  directionWorld.normalize();
+
+  let targetWorld;
+  if (fingersWorld) targetWorld = wristWorld.clone().lerp(fingersWorld, CONFIG.pickup.gripFraction);
+  else targetWorld = wristWorld.clone().addScaledVector(directionWorld, CONFIG.pickup.fallbackGripOffset);
+
+  const minDist = CONFIG.pickup.minGripDistance;
+  const distFromWrist = wristWorld.distanceTo(targetWorld);
+  if (distFromWrist < minDist) targetWorld = wristWorld.clone().addScaledVector(directionWorld, minDist);
+
+  const localOffset = targetWorld.clone();
+  handBone.worldToLocal(localOffset);
+  return localOffset;
+}
+
+/* ---- SIMPLE CCD IK ---- */
+const _IK_IDENTITY = new THREE.Quaternion();
+class SimpleIKChain {
+  constructor(effector, bones, iterations = 8, maxStep = 0.3) {
+    this.effector = effector; this.bones = bones;
+    this.iterations = iterations; this.maxStep = maxStep;
+    this.weight = 0; this.target = new THREE.Vector3();
+    this._p = new THREE.Vector3(); this._e = new THREE.Vector3();
+    this._v1 = new THREE.Vector3(); this._v2 = new THREE.Vector3();
+    this._goal = new THREE.Vector3(); this._q = new THREE.Quaternion();
+    this._pq = new THREE.Quaternion(); this._ipq = new THREE.Quaternion();
+    this._delta = new THREE.Quaternion();
+  }
+  update() {
+    if (this.weight <= 0.001 || this.bones.length === 0) return;
+    this.effector.getWorldPosition(this._e);
+    this._goal.copy(this._e).lerp(this.target, this.weight);
+    for (let it = 0; it < this.iterations; it++) {
+      for (let i = 0; i < this.bones.length; i++) {
+        const bone = this.bones[i];
+        if (!bone.parent) continue;
+        bone.getWorldPosition(this._p);
+        this.effector.getWorldPosition(this._e);
+        this._v1.subVectors(this._e, this._p);
+        this._v2.subVectors(this._goal, this._p);
+        if (this._v1.lengthSq() < 1e-10 || this._v2.lengthSq() < 1e-10) continue;
+        this._v1.normalize(); this._v2.normalize();
+        this._q.setFromUnitVectors(this._v1, this._v2);
+        const angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(this._q.w), -1, 1));
+        if (angle > this.maxStep && angle > 1e-5) this._q.slerp(_IK_IDENTITY, 1 - this.maxStep / angle);
+        bone.parent.getWorldQuaternion(this._pq);
+        this._ipq.copy(this._pq).invert();
+        this._delta.copy(this._ipq).multiply(this._q).multiply(this._pq);
+        bone.quaternion.premultiply(this._delta);
+        bone.quaternion.normalize();
+      }
+    }
+  }
+}
+
+function analyzePickupClip(model, clip, handBone) {
+  const fallback = {
+    duration: clip.duration, grabTime: clip.duration * 0.5,
+    reach: CONFIG.pickup.defaultReach, grabHeight: 0.5, detected: false,
+  };
+  if (!handBone) return fallback;
+  try {
+    const mixer = new THREE.AnimationMixer(model);
+    const action = mixer.clipAction(clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.play();
+    const v = new THREE.Vector3();
+    const N = 120;
+    const SEARCH_FROM = 0.10, SEARCH_TO = 0.75;
+    let bestT = clip.duration * 0.5, bestY = Infinity;
+    for (let i = 0; i <= N; i++) {
+      const t = clip.duration * (SEARCH_FROM + (SEARCH_TO - SEARCH_FROM) * (i / N));
+      mixer.setTime(t); model.updateMatrixWorld(true);
+      handBone.getWorldPosition(v);
+      if (v.y < bestY) { bestY = v.y; bestT = t; }
+    }
+    mixer.setTime(bestT); model.updateMatrixWorld(true); handBone.getWorldPosition(v);
+    mixer.stopAllAction(); mixer.uncacheRoot(model);
+    const reach = THREE.MathUtils.clamp(Math.hypot(v.x, v.z), 0.20, 1.00);
+    console.log('=== PICKUP CLIP ANALYSIS ===');
+    console.log(`  duration: ${clip.duration.toFixed(3)}s | grab @ ${bestT.toFixed(3)}s | reach ${reach.toFixed(3)}m`);
+    return { duration: clip.duration, grabTime: bestT, reach, grabHeight: v.y, detected: true };
+  } catch (err) {
+    console.warn('PICKUP: clip analysis failed, using fallback.', err);
+    return fallback;
+  }
+}
+
+async function initCharacter() {
+  try {
+    const [idleFbx, runFbx, jumpFbx, pickupFbx, backFbx] = await Promise.all([
+      loadFBX(CONFIG.paths.idle,   'idle',   (l, p) => { loadProgress[l] = p; updateLoadingBar(); }),
+      loadFBX(CONFIG.paths.run,    'run',    (l, p) => { loadProgress[l] = p; updateLoadingBar(); }),
+      loadFBX(CONFIG.paths.jump,   'jump',   (l, p) => { loadProgress[l] = p; updateLoadingBar(); }),
+      loadFBX(CONFIG.paths.pickup, 'pickup', (l, p) => { loadProgress[l] = p; updateLoadingBar(); })
+        .catch(() => { loadProgress.pickup = 1; updateLoadingBar(); return null; }),
+      loadFBX(CONFIG.paths.back,   'back',   (l, p) => { loadProgress[l] = p; updateLoadingBar(); })
+        .catch(() => { loadProgress.back = 1; updateLoadingBar(); return null; }),
+    ]);
+
+    console.log('idle.fbx clips:', idleFbx.animations.map((c) => c.name));
+    console.log('run.fbx clips:',  runFbx.animations.map((c) => c.name));
+    console.log('jump.fbx clips:', jumpFbx.animations.map((c) => c.name));
+    if (pickupFbx) console.log('pickUp.fbx clips:', pickupFbx.animations.map((c) => c.name));
+    if (backFbx)   console.log('back.fbx clips:',   backFbx.animations.map((c) => c.name));
+
+    const model = idleFbx;
+
+    model.traverse((obj) => {
+      if (obj.isMesh || obj.isSkinnedMesh) {
+        obj.visible = true;
+        obj.castShadow = true;
+        obj.receiveShadow = false;
+        obj.frustumCulled = false;
+      }
+    });
+
+    applyCharacterColors(model);
+    characterInfo = normalizeCharacter(model);
+
+    const clips = {
+      idle: pickClip(idleFbx, 'idle'),
+      run:  pickClip(runFbx,  'run'),
+      jump: pickClip(jumpFbx, 'jump'),
+      pickup: null,
+      back: null,
+    };
+    if (pickupFbx) {
+      try { clips.pickup = pickClip(pickupFbx, 'pickup'); }
+      catch (e) { console.warn('pickUp.fbx has no usable clip — pickups disabled.', e); }
+    }
+    if (backFbx) {
+      try { clips.back = pickClip(backFbx, 'back'); }
+      catch (e) { console.warn('back.fbx has no usable clip — backward walk disabled.', e); }
+    }
+
+    stripHorizontalRootMotion(clips.idle);
+    stripHorizontalRootMotion(clips.run);
+    stripHorizontalRootMotion(clips.jump);
+    if (clips.pickup) stripHorizontalRootMotion(clips.pickup);
+    if (clips.back)   stripHorizontalRootMotion(clips.back);
+
+    const handBone = findBone(model, CONFIG.pickup.handBoneTiers);
+    const armChain = handBone ? buildArmChain(handBone) : [];
+
+    let gripPoint = null;
+    if (handBone) {
+      const gripLocal = computeFingertipLocalOffset(handBone);
+      gripPoint = new THREE.Object3D();
+      gripPoint.name = 'GripPoint';
+      gripPoint.position.copy(gripLocal);
+      handBone.add(gripPoint);
+    }
+
+    let pickupInfo = null;
+    if (clips.pickup) pickupInfo = analyzePickupClip(model, clips.pickup, handBone);
+
+    characterRoot = new THREE.Group();
+    characterRoot.name = 'CharacterRoot';
+    characterRoot.position.set(0, CONFIG.movement.groundY, 0);
+    characterRoot.add(model);
+    scene.add(characterRoot);
+
+    console.log('%cIDLE CHARACTER ADDED TO SCENE', 'color:#4caf50;font-weight:bold;');
+    console.log('  character height:', characterInfo.height.toFixed(3), 'm');
+    console.log('  outline added by global toon pass.');
+
+    if (gripPoint && armChain.length > 0 && pickupInfo) {
+      armIK = new SimpleIKChain(gripPoint, armChain, CONFIG.pickup.ikIterations, CONFIG.pickup.ikMaxStep);
+    }
+
+    player = new PlayerController(characterRoot, model, clips, characterInfo, pickupInfo, armIK);
+
+    if (clips.pickup && CONFIG.pickup.enabled) {
+      pickupManager.populate();
+    }
+
+    loadingScreen.style.opacity = '0';
+    setTimeout(() => { loadingScreen.style.display = 'none'; }, 400);
+
+  } catch (err) {
+    console.error(err);
+    loadingErrorEl.textContent =
+      'Could not load character files.\n' +
+      'Make sure idle.fbx, run.fbx, jump.fbx, back.fbx and pickUp.fbx exist inside a "character" folder ' +
+      'next to this index.html, and that you are running this over a local server.\n\n' +
+      String(err.message || err);
+  }
+}
+
+/* =====================================================================
+   ANIMATION SYSTEM
+   ===================================================================== */
+class AnimationController {
+  constructor(mixer, clips) {
+    this.mixer = mixer;
+    this.actions = {
+      idle: mixer.clipAction(clips.idle),
+      run:  mixer.clipAction(clips.run),
+      jump: mixer.clipAction(clips.jump),
+    };
+    if (clips.pickup) this.actions.pickup = mixer.clipAction(clips.pickup);
+    if (clips.back)   this.actions.back   = mixer.clipAction(clips.back);
+
+    this.actions.idle.setLoop(THREE.LoopRepeat, Infinity);
+    this.actions.run.setLoop(THREE.LoopRepeat, Infinity);
+    this.actions.jump.setLoop(THREE.LoopOnce, 1);
+    this.actions.jump.clampWhenFinished = true;
+    if (this.actions.pickup) {
+      this.actions.pickup.setLoop(THREE.LoopOnce, 1);
+      this.actions.pickup.clampWhenFinished = true;
+    }
+    if (this.actions.back) this.actions.back.setLoop(THREE.LoopRepeat, Infinity);
+
+    for (const key of Object.keys(this.actions)) {
+      const a = this.actions[key];
+      a.enabled = true; a.setEffectiveTimeScale(1); a.setEffectiveWeight(0);
+    }
+    this.actions.idle.setEffectiveWeight(1);
+    this.actions.idle.play();
+
+    this.currentState = 'idle';
+    this._pendingLocomotionAfterJump = 'idle';
+    this._jumpActive = false;
+    this.onPickupFinished = null;
+
+    this.mixer.addEventListener('finished', (e) => {
+      if (!this.actions.pickup || e.action !== this.actions.pickup) return;
+      if (this.currentState !== 'pickup') return;
+      const dur = this.actions.pickup.getClip().duration;
+      if (this.actions.pickup.time < dur - 1e-3) return;
+      if (this.onPickupFinished) this.onPickupFinished();
+    });
+  }
+
+  _locoState(isMoving, isBackward) {
+    if (!isMoving) return 'idle';
+    if (isBackward && this.actions.back) return 'back';
+    return 'run';
+  }
+
+  hasBackwardClip() { return !!this.actions.back; }
+
+  _crossFadeTo(name, duration, useWarping) {
+    if (this.currentState === name) return;
+    if (!this.actions[name]) return;
+    if (useWarping === undefined) useWarping = CONFIG.animation.useWarping;
+    const from = this.actions[this.currentState];
+    const to = this.actions[name];
+    to.enabled = true; to.setEffectiveWeight(1); to.setEffectiveTimeScale(1);
+    to.reset(); to.play();
+    from.crossFadeTo(to, duration, useWarping);
+    this.currentState = name;
+  }
+
+  setLocomotion(isMoving, isRunning, isBackward) {
+    const next = this._locoState(isMoving, isBackward);
+    if (this.currentState === 'jump' || this.currentState === 'pickup') {
+      this._pendingLocomotionAfterJump = next;
+      return;
+    }
+    const fade = (next === 'back' || this.currentState === 'back')
+      ? CONFIG.animation.backFade
+      : CONFIG.animation.idleRunFade;
+    this._crossFadeTo(next, fade, true);
+  }
+
+  playJump() {
+    this._pendingLocomotionAfterJump =
+      this._locoState(this.currentState !== 'idle', this.currentState === 'back');
+    this._jumpActive = true;
+    this._crossFadeTo('jump', CONFIG.animation.jumpFadeIn, false);
+  }
+
+  onLand(isMoving, isBackward) {
+    if (!this._jumpActive) return;
+    this._jumpActive = false;
+    const next = this._locoState(isMoving, isBackward);
+    this._pendingLocomotionAfterJump = next;
+    this._crossFadeTo(next, CONFIG.animation.jumpFadeOut, false);
+  }
+
+  canPlayPickup() { return !!this.actions.pickup; }
+  playPickup() {
+    if (!this.actions.pickup) return false;
+    this._crossFadeTo('pickup', CONFIG.animation.pickupFadeIn, false);
+    return true;
+  }
+  finishPickup(isMoving, isBackward) {
+    this._crossFadeTo(this._locoState(isMoving, isBackward),
+                      CONFIG.animation.pickupFadeOut, false);
+  }
+  get pickupTime() { return this.actions.pickup ? this.actions.pickup.time : 0; }
+  get pickupDuration() { return this.actions.pickup ? this.actions.pickup.getClip().duration : 0; }
+  isBusy() { return this.currentState === 'jump' || this.currentState === 'pickup'; }
+  update(delta) { this.mixer.update(delta); }
+}
+
+/* =====================================================================
+   PLAYER CONTROLLER
+   ===================================================================== */
+const UP = new THREE.Vector3(0, 1, 0);
+
+class PlayerController {
+  constructor(root, model, clips, info, pickupInfo, ikChain) {
+    this.root = root; this.model = model; this.info = info;
+    this.mixer = new THREE.AnimationMixer(model);
+    this.animationController = new AnimationController(this.mixer, clips);
+    this.animationController.onPickupFinished = () => this.endPickup();
+    this.velocity = new THREE.Vector3(0, 0, 0);
+    this.grounded = true;
+    this.facingAngle = 0;
+    this.lookOffset = new THREE.Vector3(0, info.height * CONFIG.camera.lookHeightFactor, 0);
+    this.stateReadout = document.getElementById('state-readout');
+
+    this.pickupInfo = pickupInfo;
+    this.pickupState = 'none';
+    this.pickupItem = null;
+    this.heldItem = null;
+    this.pickupTimer = 0;
+    this.grabDone = false;
+    this.grabTime = pickupInfo ? pickupInfo.grabTime : 0;
+    this.grabReach = pickupInfo ? pickupInfo.reach : CONFIG.pickup.defaultReach;
+
+    this.ik = ikChain;
+    this.ikWeight = 0; this.ikWeightTarget = 0;
+    this._ikTargetWorld = new THREE.Vector3();
+
+    this.cameraMode = 'third_person';
+    this.isBackward = false;
+
+    this._camToChar = new THREE.Vector3();
+    this._forward = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._moveDir = new THREE.Vector3();
+    this._grabWorld = new THREE.Vector3();
+  }
+
+  canPickup() {
+    return !!this.pickupInfo && this.pickupState === 'none' && this.grounded &&
+           !this.heldItem && !this.animationController.isBusy();
+  }
+
+  dropHeldItem() {
+    const item = this.heldItem;
+    if (!item) return;
+    scene.attach(item.group);
+    item.toss(0, 0, 0, 0.25);
+    item.held = false; item.taken = false; item.frozen = false;
+    item.group.visible = true; item.setPromptVisible(false);
+    this.heldItem = null;
+    pickupManager.setActive(null);
+  }
+
+  requestPickup(item) {
+    if (!this.canPickup() || !item || item.taken) return;
+    this.pickupState = 'aligning';
+    this.pickupItem = item;
+    this.pickupTimer = 0; this.grabDone = false;
+    this.velocity.set(0, 0, 0);
+    this.animationController.setLocomotion(false);
+  }
+  _startPickupAnim() {
+    if (!this.animationController.playPickup()) { this.endPickup(); return; }
+    this.pickupState = 'animating';
+    this.pickupTimer = 0; this.grabDone = false;
+    this.ikWeightTarget = 1;
+  }
+  _grabItem() {
+    const item = this.pickupItem;
+    if (!item) return;
+    this.grabDone = true;
+    item.taken = true; item.frozen = true; item.setPromptVisible(false);
+    item.held = true; this.heldItem = item;
+    if (this.ik && this.ik.effector) {
+      scene.updateMatrixWorld(true);
+      this.ik.effector.attach(item.group);
+      this._applyHoldTransform(item);
+    } else { item.group.visible = false; }
+    this.ikWeightTarget = 0;
+    pickedCount++;
+  }
+  _applyHoldTransform(item) {
+    if (!item || !item.group) return;
+    const off = CONFIG.pickup.holdOffset;
+    const rot = CONFIG.pickup.holdRotation;
+    item.group.position.set(off.x, off.y, off.z);
+    item.group.rotation.set(
+      THREE.MathUtils.degToRad(rot.x),
+      THREE.MathUtils.degToRad(rot.y),
+      THREE.MathUtils.degToRad(rot.z)
+    );
+  }
+  endPickup() {
+    if (this.pickupState === 'none') return;
+    const moving = Math.hypot(InputState.moveX, InputState.moveZ) > 0.05;
+    this.animationController.finishPickup(moving, moving && this.isBackward);
+    this.pickupState = 'none'; this.pickupItem = null;
+    this.grabDone = false; this.ikWeightTarget = 0; this.pickupTimer = 0;
+    pickupManager.setActive(null);
+  }
+
+  update(delta, input, camera, cameraController) {
+    this.cameraMode = (cameraController && cameraController.mode) || 'third_person';
+
+    if (this.pickupState !== 'none') {
+      this._updatePickup(delta);
+      this.animationController.update(delta);
+      this._updateIK(delta);
+      input.jumpPressed = false; input.interactPressed = false;
+      this._updateHUD(false);
+      return;
+    }
+    const cfg = CONFIG.movement;
+    this._camToChar.subVectors(this.root.position, camera.position);
+    this._camToChar.y = 0;
+    if (this._camToChar.lengthSq() < 1e-6) this._forward.set(0, 0, -1);
+    else this._forward.copy(this._camToChar).normalize();
+    this._right.crossVectors(this._forward, UP).normalize();
+
+    let ix = input.moveX, iz = input.moveZ;
+    const inLenSq = ix * ix + iz * iz;
+    if (inLenSq > 1) { const l = Math.sqrt(inLenSq); ix /= l; iz /= l; }
+
+    this._moveDir.set(0, 0, 0);
+    this._moveDir.addScaledVector(this._forward, iz);
+    this._moveDir.addScaledVector(this._right, ix);
+
+    const moveLenSq = this._moveDir.lengthSq();
+    const isMoving = moveLenSq > 1e-6;
+    if (isMoving) this._moveDir.normalize();
+
+    let isBackward = false;
+    if (isMoving &&
+        this.cameraMode === 'third_person' &&
+        this.animationController.hasBackwardClip()) {
+      isBackward = this._moveDir.dot(this._forward) < CONFIG.movement.backwardDotThreshold;
+    }
+    this.isBackward = isBackward;
+
+    let speed = cfg.walkSpeed;
+    const isRunning = isMoving && input.run && !isBackward;
+    if (isBackward) speed *= cfg.backwardSpeedMultiplier;
+    else if (isRunning) speed *= cfg.runMultiplier;
+
+    this.root.position.x += this._moveDir.x * speed * delta;
+    this.root.position.z += this._moveDir.z * speed * delta;
+
+    if (isMoving) {
+      const fx = isBackward ? -this._moveDir.x : this._moveDir.x;
+      const fz = isBackward ? -this._moveDir.z : this._moveDir.z;
+      const targetAngle = Math.atan2(fx, fz);
+      this.facingAngle = rotateTowardsAngle(
+        this.facingAngle, targetAngle, cfg.rotationSpeed * delta
+      );
+      this.root.rotation.y = this.facingAngle;
+    }
+
+    const wasGrounded = this.grounded;
+    this.velocity.y += cfg.gravity * delta;
+    this.root.position.y += this.velocity.y * delta;
+    if (this.root.position.y <= cfg.groundY) {
+      this.root.position.y = cfg.groundY; this.velocity.y = 0; this.grounded = true;
+    } else { this.grounded = false; }
+    if (!wasGrounded && this.grounded) this.animationController.onLand(isMoving, isBackward);
+
+    if (input.jumpPressed) { this.tryJump(); input.jumpPressed = false; }
+    if (input.interactPressed) {
+      input.interactPressed = false;
+      if (this.heldItem) this.dropHeldItem();
+      else { const target = pickupManager.active; if (target) this.requestPickup(target); }
+    }
+
+    this.animationController.setLocomotion(isMoving, isRunning, isBackward);
+    this.animationController.update(delta);
+    this._updateIK(delta);
+
+    if (this.heldItem && this.ik && this.ik.effector &&
+        this.heldItem.group.parent === this.ik.effector) {
+      this._applyHoldTransform(this.heldItem);
+    }
+    this._updateHUD(isRunning);
+  }
+
+  _updatePickup(delta) {
+    const item = this.pickupItem;
+    if (!item) { this.endPickup(); return; }
+    const cfg = CONFIG.pickup;
+    this.velocity.set(0, 0, 0);
+    this.root.position.y = CONFIG.movement.groundY;
+    if (!this.grabDone) item.mesh.getWorldPosition(this._grabWorld);
+
+    const dx = this._grabWorld.x - this.root.position.x;
+    const dz = this._grabWorld.z - this.root.position.z;
+    const targetAngle = Math.atan2(dx, dz);
+
+    const turnT = 1 - Math.exp(-cfg.alignTurnSpeed * delta);
+    this.facingAngle = lerpAngle(this.facingAngle, targetAngle, turnT);
+    this.root.rotation.y = this.facingAngle;
+
+    const desiredX = this._grabWorld.x - Math.sin(this.facingAngle) * this.grabReach;
+    const desiredZ = this._grabWorld.z - Math.cos(this.facingAngle) * this.grabReach;
+    const mx = desiredX - this.root.position.x;
+    const mz = desiredZ - this.root.position.z;
+    const mlen = Math.hypot(mx, mz);
+
+    if (this.pickupState === 'aligning') {
+      this.pickupTimer += delta;
+      let moving = false;
+      if (mlen > 1e-5) {
+        const step = Math.min(cfg.alignSpeed * delta, mlen);
+        this.root.position.x += (mx / mlen) * step;
+        this.root.position.z += (mz / mlen) * step;
+        moving = step > 0.004;
+      }
+      this.animationController.setLocomotion(moving);
+      const angleErr = Math.abs(angleDelta(this.facingAngle, targetAngle));
+      const inPlace = mlen < cfg.positionTolerance;
+      const facingOk = angleErr < cfg.angleTolerance;
+      if ((inPlace && facingOk) || this.pickupTimer > cfg.alignTimeout) this._startPickupAnim();
+      return;
+    }
+    this.pickupTimer += delta;
+    if (!this.grabDone) {
+      const corrT = 1 - Math.exp(-6 * delta);
+      this.root.position.x += mx * corrT;
+      this.root.position.z += mz * corrT;
+      if (this.animationController.pickupTime >= this.grabTime) this._grabItem();
+    }
+    const dur = this.animationController.pickupDuration;
+    if (this.grabDone && dur > 0 && this.animationController.pickupTime >= dur - 1e-3) this.endPickup();
+  }
+
+  _updateIK(delta) {
+    if (!this.ik) return;
+    const target = this.ikWeightTarget;
+    const rate = (target > this.ikWeight)
+      ? 1 / Math.max(CONFIG.pickup.ikFadeIn, 1e-3)
+      : 1 / Math.max(CONFIG.pickup.ikFadeOut, 1e-3);
+    if (this.ikWeight < target) this.ikWeight = Math.min(target, this.ikWeight + rate * delta);
+    else if (this.ikWeight > target) this.ikWeight = Math.max(target, this.ikWeight - rate * delta);
+    this.ik.weight = this.ikWeight;
+    if (this.ikWeight <= 0.001) return;
+    this.root.updateMatrixWorld(true);
+    if (this.pickupItem && !this.grabDone) {
+      this.pickupItem.mesh.getWorldPosition(this._ikTargetWorld);
+      this.ik.target.copy(this._ikTargetWorld);
+    }
+    this.ik.update();
+  }
+  tryJump() {
+    if (!this.grounded) return;
+    this.grounded = false;
+    this.velocity.y = CONFIG.movement.jumpSpeed;
+    this.animationController.playJump();
+  }
+  _updateHUD(isRunning) {
+    this.stateReadout.textContent =
+      `state: ${this.animationController.currentState} | grounded: ${this.grounded} | ` +
+      `running: ${isRunning} | back: ${this.isBackward} | picked: ${pickedCount}`;
+  }
+}
+
+/* ---- Angle helpers -------------------------------------------------- */
+function lerpAngle(a, b, t) {
+  let diff = b - a;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return a + diff * t;
+}
+function angleDelta(a, b) {
+  let diff = b - a;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return diff;
+}
+function rotateTowardsAngle(current, target, maxDelta) {
+  const diff = angleDelta(current, target);
+  if (Math.abs(diff) <= maxDelta) return target;
+  return current + Math.sign(diff) * maxDelta;
+}
+
+/* =====================================================================
+   CAMERA CONTROLLER
+   ===================================================================== */
+class CameraController {
+  constructor(camera, target, info) {
+    this.camera = camera; this.target = target; this.info = info;
+    this.mode = 'third_person';
+    const h = info.height;
+    this.tpDistance = Math.max(CONFIG.camera.distance, h * 2.2);
+    this.tpHeight   = Math.max(CONFIG.camera.height, h * 1.15);
+    this.lookHeight = h * CONFIG.camera.lookHeightFactor;
+    this.birdHeight   = h * CONFIG.camera.birdHeightFactor;
+    this.birdDistance = h * CONFIG.camera.birdDistanceFactor;
+    this.currentPos = new THREE.Vector3();
+    this.currentLookAt = new THREE.Vector3();
+    this._initialized = false;
+    this.enabled = true;
+    this._desiredPos = new THREE.Vector3();
+    this._desiredLookAt = new THREE.Vector3();
+    this.minFollowDistance = this.tpDistance * 0.98;
+  }
+
+  setMode(mode) { if (this.mode === mode) return; this.mode = mode; this._initialized = false; }
+  toggleMode() { this.setMode(this.mode === 'third_person' ? 'bird_view' : 'third_person'); return this.mode; }
+  snap() { this._initialized = false; }
+
+  update(delta) {
+    if (!this.enabled) return;
+    if (this.mode === 'third_person') this._updateThirdPerson(delta);
+    else this._updateBirdView(delta);
+  }
+
+  _updateThirdPerson(delta) {
+    const t = this.target.position, facing = this.target.rotation.y;
+    this._desiredPos.set(
+      t.x + Math.sin(facing) * -this.tpDistance,
+      t.y + this.tpHeight,
+      t.z + Math.cos(facing) * -this.tpDistance
+    );
+    this._desiredLookAt.set(t.x, t.y + this.lookHeight, t.z);
+    this._apply(delta, CONFIG.camera.followLerp, CONFIG.camera.lookLerp);
+  }
+
+  _updateBirdView(delta) {
+    const t = this.target.position;
+    this._desiredPos.set(t.x, t.y + this.birdHeight, t.z + this.birdDistance);
+    this._desiredLookAt.set(t.x, t.y + this.lookHeight, t.z);
+    this._apply(delta, CONFIG.camera.birdFollowLerp, CONFIG.camera.birdLookLerp);
+  }
+
+  _apply(delta, posLerp, lookLerp) {
+    if (!this._initialized) {
+      this.currentPos.copy(this._desiredPos);
+      this.currentLookAt.copy(this._desiredLookAt);
+      this._initialized = true;
+    } else {
+      const pT = 1 - Math.exp(-posLerp * delta);
+      const lT = 1 - Math.exp(-lookLerp * delta);
+      this.currentPos.lerp(this._desiredPos, pT);
+      this.currentLookAt.lerp(this._desiredLookAt, lT);
+    }
+
+    if (this.mode === 'third_person') this._clampFollowDistance();
+
+    this.camera.position.copy(this.currentPos);
+    this.camera.lookAt(this.currentLookAt);
+  }
+
+  _clampFollowDistance() {
+    const t = this.target.position;
+    const dx = this.currentPos.x - t.x;
+    const dz = this.currentPos.z - t.z;
+    const distSq = dx * dx + dz * dz;
+    const minDist = this.minFollowDistance;
+    if (distSq >= minDist * minDist) return;
+
+    const dist = Math.sqrt(distSq);
+    if (dist < 1e-6) {
+      const f = this.target.rotation.y;
+      this.currentPos.x = t.x + Math.sin(f) * -minDist;
+      this.currentPos.z = t.z + Math.cos(f) * -minDist;
+    } else {
+      const s = minDist / dist;
+      this.currentPos.x = t.x + dx * s;
+      this.currentPos.z = t.z + dz * s;
+    }
+  }
+}
+let cameraController = null;
+const cameraReadout = document.getElementById('camera-readout');
+
+/* =====================================================================
+   MAIN LOOP
+   ===================================================================== */
+const clock = new THREE.Clock();
+let framesSinceReady = 0;
+let visibilityChecked = false;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = Math.min(clock.getDelta(), 0.1);
+  const elapsed = clock.elapsedTime;
+  readKeyboardInto(InputState);
+
+  if (player) {
+    if (!cameraController) {
+      cameraController = new CameraController(camera, player.root, player.info);
+      cameraReadout.textContent = `camera: ${cameraController.mode}`;
+    }
+    if (InputState.toggleCamera) {
+      const newMode = cameraController.toggleMode();
+      cameraReadout.textContent = `camera: ${newMode.replace('_', '-')}`;
+      InputState.toggleCamera = false;
+    }
+    pickupManager.update(delta, elapsed, player);
+    player.update(delta, InputState, camera, cameraController);
+    cameraController.update(delta);
+  }
+
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+
+  if (player && !visibilityChecked) {
+    framesSinceReady++;
+    if (framesSinceReady > 5) {
+      visibilityChecked = true;
+      const center = new THREE.Vector3();
+      characterInfo.box.getCenter(center);
+      characterRoot.localToWorld(center);
+      const ndc = center.clone().project(camera);
+      const onScreen = ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1;
+      console.log('VISIBILITY CHECK — character on screen:', onScreen);
+    }
+  }
+}
+
+console.log('RENDER LOOP STARTED');
+console.log(
+  `GLOBAL TOON GRAPHICS: enabled=${CONFIG.toon.enabled} | bands=${CONFIG.toon.gradientSteps} | ` +
+  `outlines=${CONFIG.toon.outlineEnabled} | thickness=${CONFIG.toon.outlineThickness}m`
+);
+initCharacter();
+animate();
+</script>
+</body>
+</html>
