@@ -56,7 +56,23 @@
   @keyframes promptBob { 0%, 100% { margin-top: 0px; } 50% { margin-top: -5px; } }
 
   #mobile-controls { position: fixed; inset: 0; z-index: 20; display: none; pointer-events: none; }
-  #joystick-zone { position: absolute; left: 30px; bottom: 30px; width: 130px; height: 130px; pointer-events: auto; }
+
+  /* Right half of screen: swipe to look around (CODM style) */
+  #camera-zone {
+    position: absolute;
+    top: 0; right: 0;
+    width: 50%; height: 100%;
+    pointer-events: auto;
+    z-index: 1;
+    touch-action: none;
+  }
+
+  #joystick-zone {
+    position: absolute; left: 30px; bottom: 30px;
+    width: 130px; height: 130px;
+    pointer-events: auto;
+    z-index: 3;
+  }
   #joystick-base {
     position: absolute; width: 130px; height: 130px; border-radius: 50%;
     background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.35); box-sizing: border-box;
@@ -72,8 +88,11 @@
     border-color: rgba(255, 235, 160, 0.95);
   }
   #action-zone {
-    position: absolute; right: 30px; bottom: 30px; display: flex; flex-direction: column;
-    gap: 14px; align-items: center; pointer-events: auto;
+    position: absolute; right: 30px; bottom: 30px;
+    display: flex; flex-direction: column;
+    gap: 14px; align-items: center;
+    pointer-events: auto;
+    z-index: 3;
   }
   .mobile-btn {
     width: 74px; height: 74px; border-radius: 50%;
@@ -86,8 +105,6 @@
   #cam-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(255, 215, 100, 0.3); border-color: rgba(255, 215, 100, 0.6); }
   #use-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(120, 235, 150, 0.3); border-color: rgba(120, 235, 150, 0.65); }
 
-  /* Fallback prompt for devices where the orientation lock is not allowed
-     (mainly iOS). Shown only on coarse-pointer portrait screens. */
   #rotate-overlay {
     position: fixed; inset: 0; z-index: 300;
     background: #10141a; color: #fff;
@@ -113,8 +130,8 @@
 
 <div id="hud">
   <div>WASD / Arrows: Move &nbsp;|&nbsp; Shift: Run &nbsp;|&nbsp; Space: Jump</div>
-  <div><span class="hint">E</span>: Pick up / Drop (only one item can be carried)</div>
-  <div><span class="hint">C</span> / <span class="hint">V</span>: Toggle camera mode</div>
+  <div><span class="hint">Mouse drag</span> / <span class="hint">right-screen touch</span>: Look around</div>
+  <div><span class="hint">E</span>: Pick up / Drop &nbsp;|&nbsp; <span class="hint">C</span>/<span class="hint">V</span>: Toggle camera mode</div>
   <div id="camera-readout">camera: third-person</div>
   <div id="state-readout">state: idle</div>
 </div>
@@ -132,6 +149,7 @@
 </div>
 
 <div id="mobile-controls">
+  <div id="camera-zone"></div>
   <div id="joystick-zone">
     <div id="joystick-base"></div>
     <div id="joystick-stick"></div>
@@ -162,14 +180,26 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
    ===================================================================== */
 const CONFIG = {
   ui: {
-    /* Force the touch controls on even on a desktop / non-touch device.
-       Set to false to go back to auto-detection only. */
     alwaysShowMobileControls: true,
-    /* Press this key to show/hide the touch controls at runtime. */
     toggleKey: 'KeyM',
-    /* How far the joystick must be pushed (0..1) before the character runs.
-       Replaces the old RUN button. */
     joystickRunThreshold: 0.85,
+    joystickDeadzone: 0.15,
+  },
+
+  /* ---- LOOK / CAMERA CONTROL ----------------------------------------
+     TPP orbit camera, driven by mouse drag (desktop) or by touching the
+     right half of the screen (mobile). Movement is relative to the
+     camera's horizontal forward direction — exactly like CODM /
+     Rules of Survival. */
+  look: {
+    mouseSensitivity:  0.0025,   // radians per pixel of mouse drag
+    touchSensitivity:  0.0045,   // radians per pixel of touch drag
+    minPitch: -0.15,             // lower limit (looking slightly up)
+    maxPitch:  1.10,             // upper limit (looking steeply down)
+    startPitch: 0.30,            // default vertical angle
+    startYaw:   0.0,             // default horizontal angle
+    followLerp: 12,              // how fast the camera follows the player
+    minCameraY: 0.30,            // don't let the camera dip below ground
   },
 
   paths: {
@@ -220,13 +250,10 @@ const CONFIG = {
     runMultiplier: 2.0,
     rotationSpeed: 12,
 
-    /* --- A / D (strafe + turn) feel ---------------------------------
-       These blend in based on how sideways the input is:
-         0.0 = same as pressing W / S
-         1.0 = same as pressing W / S (no reduction)
-       Lower numbers = slower sideways movement and slower turning. */
-    lateralSpeedMultiplier:    0.50,
-    lateralRotationMultiplier: 0.35,
+    /* Sideways (A/D) movement slows a little — pure W/S stays full speed. */
+    lateralSpeedMultiplier: 0.50,
+    /* Rotation is UNIFORM in every direction now. */
+    lateralRotationMultiplier: 1.0,
 
     gravity: -20,
     jumpSpeed: 7.5,
@@ -236,10 +263,10 @@ const CONFIG = {
   },
 
   camera: {
-    distance: 4.5, height: 2.4, lookHeightFactor: 0.55,
-    followLerp: 7, lookLerp: 8,
-    birdHeightFactor: 4.5, birdDistanceFactor: 3.2,
-    birdFollowLerp: 9, birdLookLerp: 9,
+    distance: 4.5,
+    lookHeightFactor: 0.55,
+    birdHeightFactor: 4.5,
+    birdDistanceFactor: 3.2,
   },
 
   animation: {
@@ -553,7 +580,6 @@ function onViewportResize() {
 }
 window.addEventListener('resize', onViewportResize);
 window.addEventListener('orientationchange', () => {
-  // Give the browser a moment to settle before re-measuring.
   setTimeout(onViewportResize, 60);
   setTimeout(onViewportResize, 350);
 });
@@ -628,12 +654,11 @@ function readKeyboardInto(input) {
    ===================================================================== */
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
-/* --- CHANGED: controls now show on desktop too --------------------- */
 const mobileControlsEl = document.getElementById('mobile-controls');
 const showTouchControls = () => { mobileControlsEl.style.display = 'block'; };
 const hideTouchControls = () => {
   mobileControlsEl.style.display = 'none';
-  joystickEnd();            // make sure we don't leave a stuck input
+  joystickEnd();
   InputState.run = false;
 };
 if (CONFIG.ui.alwaysShowMobileControls || isTouchDevice) showTouchControls();
@@ -643,7 +668,6 @@ window.addEventListener('keydown', (e) => {
   if (mobileControlsEl.style.display === 'none') showTouchControls();
   else hideTouchControls();
 });
-/* ------------------------------------------------------------------- */
 
 /* =====================================================================
    MOBILE FULLSCREEN + LANDSCAPE LOCK  (automatic)
@@ -657,7 +681,6 @@ async function enterFullscreenLandscape() {
   if (fullscreenKicked) return;
   fullscreenKicked = true;
 
-  /* 1) Fullscreen — must happen inside a user-gesture handler. */
   try {
     const el = document.documentElement;
     const alreadyFs = document.fullscreenElement || document.webkitFullscreenElement;
@@ -676,8 +699,6 @@ async function enterFullscreenLandscape() {
     console.warn('Fullscreen request was blocked:', err);
   }
 
-  /* 2) Orientation lock to landscape (works on most Android browsers,
-         usually requires fullscreen first). */
   try {
     const so = screen.orientation;
     if (so && typeof so.lock === 'function') {
@@ -707,7 +728,6 @@ if (isMobileDevice) {
   window.addEventListener('pointerup', kickFullscreen, { passive: true });
   window.addEventListener('click', kickFullscreen);
 
-  /* Re-lock if the user leaves fullscreen and comes back. */
   document.addEventListener('fullscreenchange', () => {
     const fs = document.fullscreenElement || document.webkitFullscreenElement;
     if (!fs) fullscreenKicked = false;
@@ -715,6 +735,9 @@ if (isMobileDevice) {
   });
 }
 
+/* =====================================================================
+   JOYSTICK  (movement only — same as WASD)
+   ===================================================================== */
 const Joystick = { active: false, originX: 0, originY: 0, maxRadius: 45 };
 
 const joystickZone = document.getElementById('joystick-zone');
@@ -740,12 +763,23 @@ function joystickMove(clientX, clientY) {
   const clampedX = Math.cos(angle) * dist;
   const clampedY = Math.sin(angle) * dist;
   joystickStick.style.transform = `translate(${clampedX}px, ${clampedY}px)`;
-  InputState.moveX = clampedX / Joystick.maxRadius;
-  InputState.moveZ = -clampedY / Joystick.maxRadius;
 
-  /* No RUN button any more — pushing the stick to the edge runs. */
-  const magnitude = dist / Joystick.maxRadius;
-  InputState.run = magnitude >= CONFIG.ui.joystickRunThreshold;
+  const normalized = dist / Joystick.maxRadius;
+  const dz = CONFIG.ui.joystickDeadzone;
+
+  if (normalized <= dz) {
+    InputState.moveX = 0;
+    InputState.moveZ = 0;
+    InputState.run = false;
+    joystickStick.classList.remove('running');
+    return;
+  }
+
+  const mag = Math.min(1, (normalized - dz) / (1 - dz));
+  InputState.moveX = Math.cos(angle) * mag;
+  InputState.moveZ = -Math.sin(angle) * mag;
+
+  InputState.run = mag >= CONFIG.ui.joystickRunThreshold;
   joystickStick.classList.toggle('running', InputState.run);
 }
 function joystickEnd() {
@@ -773,18 +807,102 @@ joystickZone.addEventListener('touchend', (e) => {
 }, { passive: false });
 joystickZone.addEventListener('touchcancel', joystickEnd);
 
+/* Mouse fallback for the joystick on desktop */
 let mouseJoystickDown = false;
-joystickZone.addEventListener('mousedown', (e) => { mouseJoystickDown = true; joystickStart(e.clientX, e.clientY); e.preventDefault(); });
+joystickZone.addEventListener('mousedown', (e) => {
+  mouseJoystickDown = true;
+  joystickStart(e.clientX, e.clientY);
+  e.preventDefault();
+  e.stopPropagation();
+});
 window.addEventListener('mousemove', (e) => { if (mouseJoystickDown) joystickMove(e.clientX, e.clientY); });
 window.addEventListener('mouseup', () => { if (mouseJoystickDown) { mouseJoystickDown = false; joystickEnd(); } });
 
-function bindHoldButton(el, onDown, onUp) {
-  el.addEventListener('touchstart', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); }, { passive: false });
-  el.addEventListener('touchend',   (e) => { onUp();   el.classList.remove('active'); e.preventDefault(); }, { passive: false });
-  el.addEventListener('touchcancel',(e) => { onUp();   el.classList.remove('active'); e.preventDefault(); }, { passive: false });
+/* =====================================================================
+   CAMERA LOOK  —  CODM / Rules of Survival style
+   ---------------------------------------------------------------------
+   MOBILE: swipe anywhere on the right half of the screen.
+   DESKTOP: click-and-drag the mouse anywhere that is not a UI button.
+   ===================================================================== */
+const cameraZone = document.getElementById('camera-zone');
 
-  /* --- Mouse fallback so the buttons work on desktop too --- */
-  el.addEventListener('mousedown', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); });
+let lookTouchId = null;
+let lookLastX = 0, lookLastY = 0;
+
+cameraZone.addEventListener('touchstart', (e) => {
+  if (lookTouchId !== null) return; // one look finger at a time
+  const t = e.changedTouches[0];
+  lookTouchId = t.identifier;
+  lookLastX = t.clientX;
+  lookLastY = t.clientY;
+  e.preventDefault();
+}, { passive: false });
+
+cameraZone.addEventListener('touchmove', (e) => {
+  if (lookTouchId === null) return;
+  for (const t of e.changedTouches) {
+    if (t.identifier !== lookTouchId) continue;
+    const dx = t.clientX - lookLastX;
+    const dy = t.clientY - lookLastY;
+    lookLastX = t.clientX;
+    lookLastY = t.clientY;
+    if (cameraController) {
+      cameraController.rotate(
+        dx * CONFIG.look.touchSensitivity,
+        dy * CONFIG.look.touchSensitivity
+      );
+    }
+  }
+  e.preventDefault();
+}, { passive: false });
+
+function endLookTouch(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === lookTouchId) lookTouchId = null;
+  }
+}
+cameraZone.addEventListener('touchend', endLookTouch, { passive: false });
+cameraZone.addEventListener('touchcancel', endLookTouch, { passive: false });
+
+/* --- Desktop mouse look: click-drag anywhere that's not a UI control --- */
+let mouseLookDown = false;
+let mouseLookLastX = 0, mouseLookLastY = 0;
+
+function isUIElement(el) {
+  if (!el || !el.closest) return false;
+  return !!(el.closest('.mobile-btn') || el.closest('#joystick-zone'));
+}
+
+window.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (isUIElement(e.target)) return;
+  mouseLookDown = true;
+  mouseLookLastX = e.clientX;
+  mouseLookLastY = e.clientY;
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!mouseLookDown) return;
+  if (!cameraController) return;
+  const dx = e.clientX - mouseLookLastX;
+  const dy = e.clientY - mouseLookLastY;
+  mouseLookLastX = e.clientX;
+  mouseLookLastY = e.clientY;
+  cameraController.rotate(
+    dx * CONFIG.look.mouseSensitivity,
+    dy * CONFIG.look.mouseSensitivity
+  );
+});
+
+window.addEventListener('mouseup', () => { mouseLookDown = false; });
+
+/* --- Action buttons --- */
+function bindHoldButton(el, onDown, onUp) {
+  el.addEventListener('touchstart', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
+  el.addEventListener('touchend',   (e) => { onUp();   el.classList.remove('active'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
+  el.addEventListener('touchcancel',(e) => { onUp();   el.classList.remove('active'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
+
+  el.addEventListener('mousedown', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); e.stopPropagation(); });
   window.addEventListener('mouseup', () => {
     if (el.classList.contains('active')) { onUp(); el.classList.remove('active'); }
   });
@@ -792,7 +910,6 @@ function bindHoldButton(el, onDown, onUp) {
 bindHoldButton(jumpBtn, () => { InputState.jumpPressed = true; }, () => {});
 bindHoldButton(camBtn,  () => { InputState.toggleCamera = true; },() => {});
 bindHoldButton(useBtn,  () => { InputState.interactPressed = true; },() => {});
-/* RUN button removed — running now comes from pushing the joystick to the edge. */
 
 /* =====================================================================
    PICKUP ITEMS
@@ -1365,7 +1482,6 @@ async function initCharacter() {
 
     console.log('%cIDLE CHARACTER ADDED TO SCENE', 'color:#4caf50;font-weight:bold;');
     console.log('  character height:', characterInfo.height.toFixed(3), 'm');
-    console.log('  outline added by global toon pass.');
 
     if (gripPoint && armChain.length > 0 && pickupInfo) {
       armIK = new SimpleIKChain(gripPoint, armChain, CONFIG.pickup.ikIterations, CONFIG.pickup.ikMaxStep);
@@ -1512,7 +1628,6 @@ class PlayerController {
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.grounded = true;
     this.facingAngle = 0;
-    this.lookOffset = new THREE.Vector3(0, info.height * CONFIG.camera.lookHeightFactor, 0);
     this.stateReadout = document.getElementById('state-readout');
 
     this.pickupInfo = pickupInfo;
@@ -1531,11 +1646,14 @@ class PlayerController {
     this.cameraMode = 'third_person';
     this.isBackward = false;
 
-    this._camToChar = new THREE.Vector3();
-    this._forward = new THREE.Vector3();
-    this._right = new THREE.Vector3();
+    this._forward = new THREE.Vector3(0, 0, 1);
+    this._right = new THREE.Vector3(1, 0, 0);
     this._moveDir = new THREE.Vector3();
     this._grabWorld = new THREE.Vector3();
+
+    this._smoothX = 0;
+    this._smoothZ = 0;
+    this._smoothRun = false;
   }
 
   canPickup() {
@@ -1614,13 +1732,22 @@ class PlayerController {
       return;
     }
     const cfg = CONFIG.movement;
-    this._camToChar.subVectors(this.root.position, camera.position);
-    this._camToChar.y = 0;
-    if (this._camToChar.lengthSq() < 1e-6) this._forward.set(0, 0, -1);
-    else this._forward.copy(this._camToChar).normalize();
-    this._right.crossVectors(this._forward, UP).normalize();
 
-    let ix = input.moveX, iz = input.moveZ;
+    /* Smooth the incoming stick so shaky fingers do not shake the player. */
+    const inputLerp = 1 - Math.exp(-22 * delta);
+    this._smoothX += (input.moveX - this._smoothX) * inputLerp;
+    this._smoothZ += (input.moveZ - this._smoothZ) * inputLerp;
+    this._smoothRun = input.run;
+
+    /* -------- MOVEMENT FRAME = CAMERA YAW --------------------------
+       W / stick-up  moves the character AWAY from the camera.
+       D / stick-right moves the character to the right of the screen.
+       This is exactly how CODM / Rules of Survival handles movement. */
+    const camYaw = cameraController ? cameraController.yaw : 0;
+    this._forward.set(Math.sin(camYaw), 0, Math.cos(camYaw));
+    this._right.set(-Math.cos(camYaw), 0, Math.sin(camYaw));
+
+    let ix = this._smoothX, iz = this._smoothZ;
     const inLenSq = ix * ix + iz * iz;
     if (inLenSq > 1) { const l = Math.sqrt(inLenSq); ix /= l; iz /= l; }
 
@@ -1632,14 +1759,10 @@ class PlayerController {
     const isMoving = moveLenSq > 1e-6;
     if (isMoving) this._moveDir.normalize();
 
-    /* --- How sideways is the input? -------------------------------
-       1 = pure W / S          -> full speed, full turn rate
-       0 = pure A / D          -> reduced speed, reduced turn rate
-       Diagonals (W+A) blend smoothly between the two. */
+    /* Sideways (A/D) movement slows slightly; forward/back stays full. */
     const forwardness   = isMoving ? Math.abs(this._moveDir.dot(this._forward)) : 1;
     const lateralAmount = 1 - forwardness;
     const lateralSpeedMul = THREE.MathUtils.lerp(1, cfg.lateralSpeedMultiplier, lateralAmount);
-    const lateralTurnMul  = THREE.MathUtils.lerp(1, cfg.lateralRotationMultiplier, lateralAmount);
 
     let isBackward = false;
     if (isMoving &&
@@ -1650,20 +1773,21 @@ class PlayerController {
     this.isBackward = isBackward;
 
     let speed = cfg.walkSpeed * lateralSpeedMul;
-    const isRunning = isMoving && input.run && !isBackward;
+    const isRunning = isMoving && this._smoothRun && !isBackward;
     if (isBackward) speed *= cfg.backwardSpeedMultiplier;
     else if (isRunning) speed *= cfg.runMultiplier;
 
     this.root.position.x += this._moveDir.x * speed * delta;
     this.root.position.z += this._moveDir.z * speed * delta;
 
+    /* Uniform rotation speed in every direction. */
     if (isMoving) {
       const fx = isBackward ? -this._moveDir.x : this._moveDir.x;
       const fz = isBackward ? -this._moveDir.z : this._moveDir.z;
       const targetAngle = Math.atan2(fx, fz);
       this.facingAngle = rotateTowardsAngle(
         this.facingAngle, targetAngle,
-        cfg.rotationSpeed * lateralTurnMul * delta
+        cfg.rotationSpeed * delta
       );
       this.root.rotation.y = this.facingAngle;
     }
@@ -1793,25 +1917,39 @@ function rotateTowardsAngle(current, target, maxDelta) {
 }
 
 /* =====================================================================
-   CAMERA CONTROLLER
+   CAMERA CONTROLLER  —  ORBIT (CODM / Rules of Survival style)
+   ---------------------------------------------------------------------
+   The camera orbits around the player at a yaw + pitch controlled by
+   the user. It does NOT auto-rotate to follow the player's facing.
    ===================================================================== */
 class CameraController {
   constructor(camera, target, info) {
-    this.camera = camera; this.target = target; this.info = info;
+    this.camera = camera;
+    this.target = target;
+    this.info = info;
     this.mode = 'third_person';
+
     const h = info.height;
-    this.tpDistance = Math.max(CONFIG.camera.distance, h * 2.2);
-    this.tpHeight   = Math.max(CONFIG.camera.height, h * 1.15);
-    this.lookHeight = h * CONFIG.camera.lookHeightFactor;
-    this.birdHeight   = h * CONFIG.camera.birdHeightFactor;
-    this.birdDistance = h * CONFIG.camera.birdDistanceFactor;
-    this.currentPos = new THREE.Vector3();
-    this.currentLookAt = new THREE.Vector3();
+    this.distance = Math.max(4.5, h * 2.4);
+    this.lookHeight = h * 0.62;
+
+    this.yaw = CONFIG.look.startYaw;
+    this.pitch = CONFIG.look.startPitch;
+
+    this.currentTargetPos = new THREE.Vector3();
     this._initialized = false;
-    this.enabled = true;
-    this._desiredPos = new THREE.Vector3();
-    this._desiredLookAt = new THREE.Vector3();
-    this.minFollowDistance = this.tpDistance * 0.98;
+
+    this.birdHeight = h * CONFIG.camera.birdHeightFactor;
+    this.birdDistance = h * CONFIG.camera.birdDistanceFactor;
+  }
+
+  rotate(dYaw, dPitch) {
+    this.yaw += dYaw;
+    if (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
+    if (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
+    this.pitch = THREE.MathUtils.clamp(
+      this.pitch + dPitch, CONFIG.look.minPitch, CONFIG.look.maxPitch
+    );
   }
 
   setMode(mode) { if (this.mode === mode) return; this.mode = mode; this._initialized = false; }
@@ -1819,65 +1957,65 @@ class CameraController {
   snap() { this._initialized = false; }
 
   update(delta) {
-    if (!this.enabled) return;
     if (this.mode === 'third_person') this._updateThirdPerson(delta);
     else this._updateBirdView(delta);
   }
 
   _updateThirdPerson(delta) {
-    const t = this.target.position, facing = this.target.rotation.y;
-    this._desiredPos.set(
-      t.x + Math.sin(facing) * -this.tpDistance,
-      t.y + this.tpHeight,
-      t.z + Math.cos(facing) * -this.tpDistance
-    );
-    this._desiredLookAt.set(t.x, t.y + this.lookHeight, t.z);
-    this._apply(delta, CONFIG.camera.followLerp, CONFIG.camera.lookLerp);
+    const t = this.target.position;
+
+    if (!this._initialized) {
+      this.currentTargetPos.copy(t);
+      this._initialized = true;
+    } else {
+      const lerp = 1 - Math.exp(-CONFIG.look.followLerp * delta);
+      this.currentTargetPos.x += (t.x - this.currentTargetPos.x) * lerp;
+      this.currentTargetPos.y += (t.y - this.currentTargetPos.y) * lerp;
+      this.currentTargetPos.z += (t.z - this.currentTargetPos.z) * lerp;
+    }
+
+    const lookAtX = this.currentTargetPos.x;
+    const lookAtY = this.currentTargetPos.y + this.lookHeight;
+    const lookAtZ = this.currentTargetPos.z;
+
+    const cosP = Math.cos(this.pitch);
+    const sinP = Math.sin(this.pitch);
+    const hDist = this.distance * cosP;
+    const vDist = this.distance * sinP;
+
+    /* Camera sits BEHIND the yaw direction. With yaw = 0 the camera
+       is on -Z, looking toward +Z. */
+    let camX = lookAtX - Math.sin(this.yaw) * hDist;
+    let camY = lookAtY + vDist;
+    let camZ = lookAtZ - Math.cos(this.yaw) * hDist;
+
+    camY = Math.max(camY, CONFIG.look.minCameraY);
+
+    this.camera.position.set(camX, camY, camZ);
+    this.camera.lookAt(lookAtX, lookAtY, lookAtZ);
   }
 
   _updateBirdView(delta) {
     const t = this.target.position;
-    this._desiredPos.set(t.x, t.y + this.birdHeight, t.z + this.birdDistance);
-    this._desiredLookAt.set(t.x, t.y + this.lookHeight, t.z);
-    this._apply(delta, CONFIG.camera.birdFollowLerp, CONFIG.camera.birdLookLerp);
-  }
 
-  _apply(delta, posLerp, lookLerp) {
     if (!this._initialized) {
-      this.currentPos.copy(this._desiredPos);
-      this.currentLookAt.copy(this._desiredLookAt);
+      this.currentTargetPos.copy(t);
       this._initialized = true;
     } else {
-      const pT = 1 - Math.exp(-posLerp * delta);
-      const lT = 1 - Math.exp(-lookLerp * delta);
-      this.currentPos.lerp(this._desiredPos, pT);
-      this.currentLookAt.lerp(this._desiredLookAt, lT);
+      const lerp = 1 - Math.exp(-CONFIG.look.followLerp * delta);
+      this.currentTargetPos.lerp(t, lerp);
     }
 
-    if (this.mode === 'third_person') this._clampFollowDistance();
-
-    this.camera.position.copy(this.currentPos);
-    this.camera.lookAt(this.currentLookAt);
-  }
-
-  _clampFollowDistance() {
-    const t = this.target.position;
-    const dx = this.currentPos.x - t.x;
-    const dz = this.currentPos.z - t.z;
-    const distSq = dx * dx + dz * dz;
-    const minDist = this.minFollowDistance;
-    if (distSq >= minDist * minDist) return;
-
-    const dist = Math.sqrt(distSq);
-    if (dist < 1e-6) {
-      const f = this.target.rotation.y;
-      this.currentPos.x = t.x + Math.sin(f) * -minDist;
-      this.currentPos.z = t.z + Math.cos(f) * -minDist;
-    } else {
-      const s = minDist / dist;
-      this.currentPos.x = t.x + dx * s;
-      this.currentPos.z = t.z + dz * s;
-    }
+    this.camera.position.set(
+      this.currentTargetPos.x,
+      this.currentTargetPos.y + this.birdHeight,
+      this.currentTargetPos.z + this.birdDistance
+    );
+    this.camera.lookAt(
+      this.currentTargetPos.x,
+      this.currentTargetPos.y + this.lookHeight,
+      this.currentTargetPos.z
+    );
   }
 }
 let cameraController = null;
@@ -1899,6 +2037,8 @@ function animate() {
   if (player) {
     if (!cameraController) {
       cameraController = new CameraController(camera, player.root, player.info);
+      // Snap camera to the desired orbit position immediately.
+      cameraController.update(0.016);
       cameraReadout.textContent = `camera: ${cameraController.mode}`;
     }
     if (InputState.toggleCamera) {
