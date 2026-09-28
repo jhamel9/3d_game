@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>3D Character Controller - Three.js (Roblox-style + Bird-View Joystick)</title>
+<title>3D Character Controller - Three.js (Roblox-style + Fixed Bird-View)</title>
 <style>
   html, body {
     margin: 0; padding: 0; overflow: hidden;
@@ -130,9 +130,9 @@
 
 <div id="hud">
   <div>WASD / Arrows: Move &nbsp;|&nbsp; Shift: Run &nbsp;|&nbsp; Space: Jump</div>
-  <div><span class="hint">Mouse</span> / <span class="hint">right-screen touch</span>: Look &amp; aim</div>
+  <div><span class="hint">Mouse</span> / <span class="hint">right-screen touch</span>: Look &amp; aim (3rd-person only)</div>
   <div><span class="hint">E</span>: Pick up / Drop &nbsp;|&nbsp; <span class="hint">C</span>/<span class="hint">V</span>: Toggle camera mode</div>
-  <div><span class="hint">Bird view</span>: joystick orbits the camera (look zone is ignored)</div>
+  <div><span class="hint">Bird view</span>: fixed overhead camera — joystick moves the player only</div>
   <div id="camera-readout">camera: third-person</div>
   <div id="state-readout">state: idle</div>
 </div>
@@ -192,16 +192,10 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
        "snap to camera yaw while standing still" behaviour.
 
    BIRD VIEW (CONFIG.birdView):
-     - The overhead camera is driven ONLY by the movement joystick.
-       Stick ← → : orbit around the character.
-       Stick ↑ ↓ : tilt between a low 3/4 angle and straight down.
-     - Mouse and the right-half touch look zone are IGNORED in bird view.
-
-   AUTO-FULLSCREEN / AUTO-ROTATE:
-     The page tries to enter fullscreen + landscape on load, then again
-     on the FIRST interaction of any kind (touch, tap, scroll, key,
-     pointer, wheel). There is no dedicated "tap here" prompt — any
-     interaction works, and the retry loop keeps firing until it sticks.
+     - FIXED overhead follow camera. The joystick controls ONLY the
+       player's movement — there is no camera orbit or tilt.
+     - The look zone (mouse / right-side touch drag) is a no-op in bird
+       view so the player is free to use the joystick for movement.
    ===================================================================== */
 const CONFIG = {
   ui: {
@@ -328,20 +322,24 @@ const CONFIG = {
   },
 
   /* -------------------------------------------------------------------
-     BIRD VIEW — joystick-only overhead camera.
+     BIRD VIEW — FIXED overhead follow camera.
+
+     The camera does NOT respond to any user input. It simply follows
+     the player's position from above, and the joystick continues to
+     move the player exactly like it does in third-person mode.
      ------------------------------------------------------------------- */
   birdView: {
-    joystickControlsCamera: true,
+    /* Fixed downward tilt of the overhead camera (radians).
+       0    = level with the player
+       π/2  = straight down
+       1.15 rad ≈ 66° gives a classic 3/4 overhead view with a bit of
+       depth, so the player can still see the ground. */
+    pitch: 1.15,
 
-    /* While the joystick is orbiting the bird camera the character holds
-       still. Set true if you want the joystick to drive the body too. */
-    moveCharacterWithJoystick: false,
+    /* Distance = characterHeight × distanceScale. */
+    distanceScale: 5.5,
 
-    orbitSpeed: 2.4,      // rad/s at full stick deflection
-    pitchSpeed: 1.5,      // rad/s
-    minPitch: 0.15,       // ~ near-horizontal
-    maxPitch: 1.52,       // ~ straight down
-    distanceScale: 5.5,   // × character height
+    /* Positional follow smoothing (larger = snappier). */
     followLerp: 8,
   },
 
@@ -956,9 +954,8 @@ window.addEventListener('mouseup', () => { if (mouseJoystickDown) { mouseJoystic
 /* =====================================================================
    CAMERA LOOK  —  RIGHT half of screen (mobile) / mouse (desktop)
    ---------------------------------------------------------------------
-   In third-person mode, the look input rotates the camera.
-   In bird-view mode, look input is IGNORED — the joystick drives the
-   overhead camera instead.
+   Only active in third-person mode. In bird-view mode the look zone is
+   a no-op — the joystick is free to move the player.
    ===================================================================== */
 const cameraZone = document.getElementById('camera-zone');
 
@@ -1777,11 +1774,17 @@ class AnimationController {
    PLAYER CONTROLLER
    ---------------------------------------------------------------------
    KEY MODEL (Roblox-style):
-     - CAMERA yaw/pitch controlled by mouse / right-screen touch.
+     - CAMERA yaw/pitch controlled by mouse / right-screen touch
+       (third-person mode only).
      - The character ALWAYS turns to face the direction it is moving.
        Pressing S spins the character 180° and it runs toward the camera.
      - No strafing, no back-pedal, no strafe speed penalty.
      - While idle the character keeps its last facing (configurable).
+
+   BIRD-VIEW NOTE:
+     - The movement frame uses `cameraController.controlYaw`, which
+       returns 0 in bird view (the fixed overhead camera sits at -Z of
+       the player, so "up on screen" = +Z world).
    ===================================================================== */
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -1912,12 +1915,13 @@ class PlayerController {
     this._smoothRun = input.run;
 
     /* -----------------------------------------------------------------
-       MOVEMENT FRAME = CAMERA YAW
-       Joystick UP → away from camera (camera forward).
-       Joystick RIGHT → camera's right.
+       MOVEMENT FRAME = ACTIVE CONTROL YAW
+       In third-person this is the camera yaw.
+       In bird view this is 0 (the fixed overhead camera looks toward +Z,
+       so "up on screen" = +Z and "right on screen" = -X).
        Diagonal normalized → no diagonal speed boost.
        ----------------------------------------------------------------- */
-    const camYaw = cameraController ? cameraController.yaw : 0;
+    const camYaw = cameraController ? cameraController.controlYaw : 0;
     this._forward.set(Math.sin(camYaw), 0, Math.cos(camYaw));
     this._right.set(-Math.cos(camYaw), 0, Math.sin(camYaw));
 
@@ -1985,9 +1989,9 @@ class PlayerController {
     if (isMoving && !isBackward) {
       targetAngle = Math.atan2(this._moveDir.x, this._moveDir.z);
     } else if (isBackward) {
-      targetAngle = cameraController ? cameraController.yaw : this.facingAngle;
+      targetAngle = cameraController ? cameraController.controlYaw : this.facingAngle;
     } else if (cfg.faceCameraWhenIdle && cameraController) {
-      targetAngle = cameraController.yaw;
+      targetAngle = cameraController.controlYaw;
     }
     this.facingAngle = rotateTowardsAngle(
       this.facingAngle, targetAngle,
@@ -1996,7 +2000,7 @@ class PlayerController {
     this.root.rotation.y = this.facingAngle;
 
     /* Optional Roblox "classic camera": swing the camera around behind
-       the character while it is moving. Off by default. */
+       the character while it is moving. Only in third-person mode. */
     if (CONFIG.camera.autoAlign && cameraController &&
         this.cameraMode === 'third_person' && isMoving && !isBackward) {
       const alignT = 1 - Math.exp(-CONFIG.camera.autoAlignStrength * delta);
@@ -2130,15 +2134,18 @@ function rotateTowardsAngle(current, target, maxDelta) {
 }
 
 /* =====================================================================
-   CAMERA CONTROLLER  —  ORBIT (Roblox classic / ROS style)
+   CAMERA CONTROLLER
    ---------------------------------------------------------------------
-   - Camera orbits the player at a user-controlled yaw + pitch.
-   - yaw is UN-INVERTED: swiping right on the look area rotates the
-     view to the right.
-   - Snappy follow (followLerp = 30) — glued to the player, no floaty lag.
-   - Ray-cast collision pulls the camera in when a prop blocks the view
-     and eases the distance back out when clear.
-   - BIRD VIEW is joystick-only: mouse / touch look is ignored there.
+   THIRD-PERSON:
+     - Orbits the player at a user-controlled yaw + pitch.
+     - yaw is UN-INVERTED: swiping right rotates the view to the right.
+     - Snappy follow, ray-cast collision pull-in.
+
+   BIRD VIEW:
+     - FIXED overhead follow camera. The joystick does NOT touch it.
+     - The look zone (mouse / touch) is a no-op in this mode.
+     - Camera sits at a fixed offset above and behind the player and
+       just tracks position with a soft lerp.
    ===================================================================== */
 class CameraController {
   constructor(camera, target, info) {
@@ -2160,9 +2167,6 @@ class CameraController {
     this.currentTargetPos = new THREE.Vector3();
     this._initialized = false;
 
-    this.birdHeight   = h * CONFIG.camera.birdHeightFactor;
-    this.birdDistance = h * CONFIG.camera.birdDistanceFactor;
-
     this._raycaster = new THREE.Raycaster();
     this._rayFrom = new THREE.Vector3();
     this._rayTo   = new THREE.Vector3();
@@ -2170,20 +2174,22 @@ class CameraController {
 
     this._smoothedDistance = this.distance;
 
-    /* --- Bird-view orbit state (joystick driven) ------------------- */
-    const birdH = info.height * CONFIG.camera.birdHeightFactor;
-    const birdD = info.height * CONFIG.camera.birdDistanceFactor;
+    /* Fixed bird-view geometry — no yaw, no user-controlled pitch. */
     this.birdDistance = info.height * CONFIG.birdView.distanceScale;
-    this.birdPitch = Math.atan2(birdH, birdD);
-    this.birdYaw = CONFIG.look.startYaw;
+  }
+
+  /* The yaw used to build the player's movement frame.
+     Third-person → live camera yaw.
+     Bird view    → 0, because the fixed overhead camera sits at -Z of
+                    the player and looks toward +Z. */
+  get controlYaw() {
+    return this.mode === 'bird_view' ? 0 : this.yaw;
   }
 
   /* Called from look input. yaw wraps 360°, pitch is clamped.
-     NOTE: yaw is DEcreased by dYaw so a rightward swipe/mouse move
-     rotates the view to the right (un-inverted).
-     BIRD VIEW IS JOYSTICK-ONLY — mouse / touch look is ignored there. */
+     BIRD VIEW IS A NO-OP — the joystick is free for player movement. */
   rotate(dYaw, dPitch) {
-    if (this.mode === 'bird_view' && CONFIG.birdView.joystickControlsCamera) return;
+    if (this.mode === 'bird_view') return;
 
     this.yaw -= dYaw;
     if (this.yaw >  Math.PI) this.yaw -= Math.PI * 2;
@@ -2195,30 +2201,12 @@ class CameraController {
 
   setMode(mode) {
     if (this.mode === mode) return;
-    /* Entering bird view: start from the current third-person heading. */
-    if (mode === 'bird_view') this.birdYaw = this.yaw;
     this.mode = mode;
     this._initialized = false;
     this._smoothedDistance = this.distance;
   }
   toggleMode() { this.setMode(this.mode === 'third_person' ? 'bird_view' : 'third_person'); return this.mode; }
   snap() { this._initialized = false; }
-
-  /* -------------------------------------------------------------------
-     BIRD VIEW CONTROL — joystick only.
-       x = stick right (+1)  → orbit the camera clockwise
-       z = stick forward (+1) → raise the camera toward top-down
-     ------------------------------------------------------------------- */
-  orbitBird(x, z, delta) {
-    this.birdYaw -= x * CONFIG.birdView.orbitSpeed * delta;
-    if (this.birdYaw >  Math.PI) this.birdYaw -= Math.PI * 2;
-    if (this.birdYaw < -Math.PI) this.birdYaw += Math.PI * 2;
-
-    this.birdPitch = THREE.MathUtils.clamp(
-      this.birdPitch + z * CONFIG.birdView.pitchSpeed * delta,
-      CONFIG.birdView.minPitch, CONFIG.birdView.maxPitch
-    );
-  }
 
   update(delta) {
     if (this.mode === 'third_person') this._updateThirdPerson(delta);
@@ -2291,6 +2279,11 @@ class CameraController {
     this.camera.lookAt(lookAtX, lookAtY, lookAtZ);
   }
 
+  /* -------------------------------------------------------------------
+     BIRD VIEW — FIXED overhead follow camera.
+     No joystick input, no mouse input, no touch input.
+     Just track the player's position with a soft lerp.
+     ------------------------------------------------------------------- */
   _updateBirdView(delta) {
     const t = this.target.position;
 
@@ -2306,14 +2299,16 @@ class CameraController {
     const lookY = this.currentTargetPos.y + this.lookHeight;
     const lookZ = this.currentTargetPos.z;
 
-    const cosP = Math.cos(this.birdPitch);
-    const sinP = Math.sin(this.birdPitch);
+    const cosP = Math.cos(CONFIG.birdView.pitch);
+    const sinP = Math.sin(CONFIG.birdView.pitch);
     const d    = this.birdDistance;
 
+    /* Fixed offset: camera always sits at -Z of the player, elevated.
+       No rotation — the world orientation on screen never changes. */
     this.camera.position.set(
-      lookX - Math.sin(this.birdYaw) * d * cosP,
+      lookX,
       lookY + d * sinP,
-      lookZ - Math.cos(this.birdYaw) * d * cosP
+      lookZ - d * cosP
     );
     this.camera.lookAt(lookX, lookY, lookZ);
   }
@@ -2348,27 +2343,13 @@ function animate() {
     if (InputState.toggleCamera) {
       const newMode = cameraController.toggleMode();
       cameraReadout.textContent = (newMode === 'bird_view')
-        ? 'camera: bird-view (joystick)'
+        ? 'camera: bird-view (fixed)'
         : 'camera: third-person';
       InputState.toggleCamera = false;
     }
 
-    /* -----------------------------------------------------------------
-       BIRD VIEW: the movement joystick drives the CAMERA, not the body.
-       The right-half look zone is already ignored by rotate().
-       ----------------------------------------------------------------- */
-    if (cameraController.mode === 'bird_view' &&
-        CONFIG.birdView.joystickControlsCamera &&
-        Joystick.active) {
-
-      cameraController.orbitBird(InputState.moveX, InputState.moveZ, delta);
-
-      if (!CONFIG.birdView.moveCharacterWithJoystick) {
-        InputState.moveX = 0;
-        InputState.moveZ = 0;
-        InputState.run   = false;
-      }
-    }
+    /* No bird-view joystick handling — the joystick ALWAYS moves the
+       player. The bird camera is a fixed follow rig. */
 
     pickupManager.update(delta, elapsed, player);
     player.update(delta, InputState, camera, cameraController);
@@ -2403,8 +2384,8 @@ console.log(
   `autoAlignCamera=${CONFIG.camera.autoAlign}`
 );
 console.log(
-  `BIRD VIEW: joystickControlsCamera=${CONFIG.birdView.joystickControlsCamera} | ` +
-  `moveCharacterWithJoystick=${CONFIG.birdView.moveCharacterWithJoystick}`
+  `BIRD VIEW: fixed overhead follow camera | ` +
+  `pitch=${CONFIG.birdView.pitch} | distanceScale=${CONFIG.birdView.distanceScale}`
 );
 initCharacter();
 animate();
