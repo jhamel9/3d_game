@@ -196,6 +196,12 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
        Stick ← → : orbit around the character.
        Stick ↑ ↓ : tilt between a low 3/4 angle and straight down.
      - Mouse and the right-half touch look zone are IGNORED in bird view.
+
+   AUTO-FULLSCREEN / AUTO-ROTATE:
+     The page tries to enter fullscreen + landscape on load, then again
+     on the FIRST interaction of any kind (touch, tap, scroll, key,
+     pointer, wheel). There is no dedicated "tap here" prompt — any
+     interaction works, and the retry loop keeps firing until it sticks.
    ===================================================================== */
 const CONFIG = {
   ui: {
@@ -744,7 +750,18 @@ window.addEventListener('keydown', (e) => {
 });
 
 /* =====================================================================
-   MOBILE FULLSCREEN + LANDSCAPE LOCK  (automatic)
+   MOBILE FULLSCREEN + LANDSCAPE LOCK  (automatic, no dedicated tap)
+   ---------------------------------------------------------------------
+   Browsers require a user gesture for Fullscreen + Orientation Lock.
+   To make this feel automatic:
+     1. We attempt it IMMEDIATELY on load (works if the page was opened
+        from a user gesture — e.g. tapping a link).
+     2. We listen to EVERY user-interaction event (touch, pointer, mouse,
+        key, wheel, scroll, focus, visibilitychange) and re-attempt on
+        each one until it succeeds. The first gesture the user makes —
+        whatever it is — will trigger it.
+     3. A slow interval retry (every 400ms) handles the case where the
+        browser becomes "ready" a moment after load.
    ===================================================================== */
 const isMobileDevice =
   isTouchDevice || /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent);
@@ -753,12 +770,13 @@ let fullscreenKicked = false;
 
 async function enterFullscreenLandscape() {
   if (fullscreenKicked) return;
-  fullscreenKicked = true;
 
+  let gotFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+
+  /* ---- Fullscreen ------------------------------------------------ */
   try {
-    const el = document.documentElement;
-    const alreadyFs = document.fullscreenElement || document.webkitFullscreenElement;
-    if (!alreadyFs) {
+    if (!gotFs) {
+      const el = document.documentElement;
       const req =
         el.requestFullscreen ||
         el.webkitRequestFullscreen ||
@@ -766,47 +784,83 @@ async function enterFullscreenLandscape() {
         el.msRequestFullscreen;
       if (req) {
         const p = req.call(el, { navigationUI: 'hide' });
-        if (p && typeof p.then === 'function') await p.catch(() => {});
+        if (p && typeof p.then === 'function') {
+          await p.then(() => { gotFs = true; }).catch(() => {});
+        } else {
+          gotFs = true;  // synchronous legacy API
+        }
       }
     }
   } catch (err) {
     console.warn('Fullscreen request was blocked:', err);
   }
 
+  /* ---- Orientation lock ------------------------------------------ */
+  let gotLock = false;
   try {
     const so = screen.orientation;
     if (so && typeof so.lock === 'function') {
-      await so.lock('landscape').catch(() => {});
+      await so.lock('landscape')
+        .then(() => { gotLock = true; })
+        .catch(() => {});
     } else if (typeof screen.lockOrientation === 'function') {
-      screen.lockOrientation('landscape');
+      gotLock = screen.lockOrientation('landscape');
     } else if (typeof screen.mozLockOrientation === 'function') {
-      screen.mozLockOrientation('landscape');
+      gotLock = screen.mozLockOrientation('landscape');
     } else if (typeof screen.msLockOrientation === 'function') {
-      screen.msLockOrientation('landscape');
+      gotLock = screen.msLockOrientation('landscape');
+    } else {
+      // No orientation-lock API on this browser — nothing more we can do.
+      gotLock = true;
     }
   } catch (err) {
     console.warn('Orientation lock not available:', err);
   }
 
+  /* Consider ourselves done once either succeeded (or nothing more we
+     can do). Otherwise keep retrying on the next user gesture. */
+  if (gotFs || gotLock) fullscreenKicked = true;
+
   onViewportResize();
 }
 
 if (isMobileDevice) {
-  const kickFullscreen = () => {
-    enterFullscreenLandscape();
-    window.removeEventListener('touchend', kickFullscreen);
-    window.removeEventListener('click', kickFullscreen);
-    window.removeEventListener('pointerup', kickFullscreen);
-  };
-  window.addEventListener('touchend', kickFullscreen, { passive: true });
-  window.addEventListener('pointerup', kickFullscreen, { passive: true });
-  window.addEventListener('click', kickFullscreen);
+  /* 1. Immediate attempt — works if launched from a user gesture. */
+  enterFullscreenLandscape();
 
-  document.addEventListener('fullscreenchange', () => {
+  /* 2. Retry on the FIRST interaction of any kind. Every event is
+        passive + capture-phase so it can never block the app. */
+  const kick = () => { if (!fullscreenKicked) enterFullscreenLandscape(); };
+  const KICK_EVENTS = [
+    'touchstart', 'touchend', 'touchmove',
+    'pointerdown', 'pointerup', 'pointermove',
+    'mousedown', 'mouseup', 'click',
+    'keydown', 'keyup',
+    'wheel', 'scroll',
+    'focus', 'visibilitychange',
+  ];
+  for (const evt of KICK_EVENTS) {
+    window.addEventListener(evt, kick, { passive: true, capture: true });
+    document.addEventListener(evt, kick, { passive: true, capture: true });
+  }
+
+  /* 3. Slow retry loop — covers browsers that need a moment. */
+  let tries = 0;
+  const retryId = setInterval(() => {
+    if (fullscreenKicked || ++tries > 40) { clearInterval(retryId); return; }
+    enterFullscreenLandscape();
+  }, 400);
+
+  /* Re-arm the kick whenever we lose fullscreen. */
+  const onFsChange = () => {
     const fs = document.fullscreenElement || document.webkitFullscreenElement;
     if (!fs) fullscreenKicked = false;
     setTimeout(onViewportResize, 60);
-  });
+  };
+  document.addEventListener('fullscreenchange', onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+  document.addEventListener('mozfullscreenchange', onFsChange);
+  document.addEventListener('MSFullscreenChange', onFsChange);
 }
 
 /* =====================================================================
