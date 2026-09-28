@@ -3,23 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-
-<!-- Mobile / PWA / orientation hints -->
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="3D Char">
-<meta name="screen-orientation" content="landscape">
-<meta name="x5-orientation" content="landscape">
-<meta name="full-screen" content="yes">
-<meta name="x5-fullscreen" content="true">
-<meta name="browsermode" content="application">
-<meta name="x5-page-mode" content="app">
-
-<!-- Inline manifest: display:fullscreen + orientation:landscape (iOS/Android PWA) -->
-<link rel="manifest" href='data:application/manifest+json,{"name":"3D Character Controller","short_name":"3D Char","display":"fullscreen","orientation":"landscape","start_url":"./","scope":"./","background_color":"%2387ceeb","theme_color":"%2387ceeb"}'>
-
-<title>3D Character Controller - Three.js (Global Toon / Cel / Outline)</title>
+<title>3D Character Controller - Three.js (Roblox-style + Bird-View Joystick)</title>
 <style>
   html, body {
     margin: 0; padding: 0; overflow: hidden;
@@ -73,6 +57,7 @@
 
   #mobile-controls { position: fixed; inset: 0; z-index: 20; display: none; pointer-events: none; }
 
+  /* Right half of screen: swipe to look + rotate player (CODM style) */
   #camera-zone {
     position: absolute;
     top: 0; right: 0;
@@ -120,97 +105,22 @@
   #cam-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(255, 215, 100, 0.3); border-color: rgba(255, 215, 100, 0.6); }
   #use-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(120, 235, 150, 0.3); border-color: rgba(120, 235, 150, 0.65); }
 
-  /* ------------------------------------------------------------------
-     FAKE-LANDSCAPE (iOS fallback)
-     ------------------------------------------------------------------ */
-  @media screen and (orientation: portrait) and (pointer: coarse) {
-    html, body {
-      width: 100vh;
-      height: 100vw;
-      overflow: hidden;
-      margin: 0; padding: 0;
-    }
-    body {
-      position: absolute;
-      top: 0; left: 0;
-      transform-origin: 0 0;
-      transform: translateX(100vw) rotate(90deg);
-    }
+  #rotate-overlay {
+    position: fixed; inset: 0; z-index: 300;
+    background: #10141a; color: #fff;
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 16px; text-align: center; padding: 24px;
+    font-size: 15px; letter-spacing: 0.02em;
   }
-
-  /* ====================================================================
-     PAUSE OVERLAY
-     ==================================================================== */
-  #pause-overlay {
-    position: fixed; inset: 0;
-    z-index: 50;
-    background: rgba(10, 14, 20, 0.92);
-    color: #fff;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 18px;
-    text-align: center;
-    padding: 24px;
-    font-family: Arial, Helvetica, sans-serif;
-    pointer-events: auto;
+  #rotate-overlay .icon { font-size: 48px; line-height: 1; animation: rotateHint 2.2s ease-in-out infinite; }
+  @keyframes rotateHint {
+    0%, 35%   { transform: rotate(0deg); }
+    65%, 100% { transform: rotate(90deg); }
   }
-  #pause-overlay h2 {
-    margin: 0;
-    font-size: 30px;
-    letter-spacing: 0.06em;
-    font-weight: 800;
+  @media (orientation: portrait) and (pointer: coarse) {
+    #rotate-overlay { display: flex; }
   }
-  #pause-overlay p {
-    margin: 0 0 8px;
-    color: #b8c2cf;
-    font-size: 13px;
-    max-width: 320px;
-    line-height: 1.5;
-  }
-  .pause-btn {
-    width: 240px;
-    padding: 14px 20px;
-    border-radius: 999px;
-    border: 2px solid rgba(255, 255, 255, 0.35);
-    background: rgba(255, 255, 255, 0.10);
-    color: #fff;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .pause-btn:hover { background: rgba(255, 255, 255, 0.18); }
-  .pause-btn:active { transform: scale(0.97); }
-  .pause-btn.primary {
-    background: #4caf50;
-    border-color: #4caf50;
-    box-shadow: 0 8px 24px rgba(76, 175, 80, 0.35);
-  }
-  .pause-btn.primary:hover { background: #57c05c; border-color: #57c05c; }
-  .pause-btn.danger {
-    background: transparent;
-    border-color: rgba(255, 107, 107, 0.6);
-    color: #ff8a8a;
-  }
-  .pause-btn.danger:hover { background: rgba(255, 107, 107, 0.12); }
-
-  /* When paused, undo the fake-landscape rotation so the menu appears
-     upright in portrait. */
-  body.paused {
-    width: 100vw !important;
-    height: 100vh !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    transform: none !important;
-  }
-  body.paused #mobile-controls,
-  body.paused #mobile-controls * { pointer-events: none !important; }
-  body.paused #hud { display: none; }
 </style>
 <base target="_blank">
 </head>
@@ -222,6 +132,7 @@
   <div>WASD / Arrows: Move &nbsp;|&nbsp; Shift: Run &nbsp;|&nbsp; Space: Jump</div>
   <div><span class="hint">Mouse</span> / <span class="hint">right-screen touch</span>: Look &amp; aim</div>
   <div><span class="hint">E</span>: Pick up / Drop &nbsp;|&nbsp; <span class="hint">C</span>/<span class="hint">V</span>: Toggle camera mode</div>
+  <div><span class="hint">Bird view</span>: joystick orbits the camera (look zone is ignored)</div>
   <div id="camera-readout">camera: third-person</div>
   <div id="state-readout">state: idle</div>
 </div>
@@ -231,6 +142,11 @@
   <p>Fetching idle.fbx, run.fbx, jump.fbx, back.fbx and pickUp.fbx from ./character/</p>
   <div id="loading-bar-track"><div id="loading-bar-fill"></div></div>
   <div id="loading-error"></div>
+</div>
+
+<div id="rotate-overlay">
+  <div class="icon">📱</div>
+  <div>Rotate your device to landscape</div>
 </div>
 
 <div id="mobile-controls">
@@ -244,13 +160,6 @@
     <div id="use-btn" class="mobile-btn">USE</div>
     <div id="jump-btn" class="mobile-btn">JUMP</div>
   </div>
-</div>
-
-<div id="pause-overlay">
-  <h2>Paused</h2>
-  <p>Tap Resume to go fullscreen and continue playing.</p>
-  <button id="resume-btn" class="pause-btn primary">▶ Resume</button>
-  <button id="exit-btn" class="pause-btn danger">✕ Exit</button>
 </div>
 
 <script type="importmap">
@@ -269,23 +178,48 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 
 /* =====================================================================
    CONFIG
+   ---------------------------------------------------------------------
+   ROBLOX-STYLE / CODM-mobile / ROS-desktop feel.
+
+   KEY MODEL (Roblox rules — CONFIG.movement.robloxStyle = true):
+     - Camera yaw/pitch is user-controlled (mouse / right-screen touch).
+     - MOVEMENT is camera-relative.
+     - The character ALWAYS turns to face the direction it is moving.
+       Pressing S spins the character 180° and it runs toward the camera
+       (no back-pedal clip, no strafing, no strafe speed penalty).
+     - While idle the character keeps its last facing (Roblox default).
+       Set CONFIG.movement.faceCameraWhenIdle = true to restore the old
+       "snap to camera yaw while standing still" behaviour.
+
+   BIRD VIEW (CONFIG.birdView):
+     - The overhead camera is driven ONLY by the movement joystick.
+       Stick ← → : orbit around the character.
+       Stick ↑ ↓ : tilt between a low 3/4 angle and straight down.
+     - Mouse and the right-half touch look zone are IGNORED in bird view.
    ===================================================================== */
 const CONFIG = {
   ui: {
     alwaysShowMobileControls: true,
     toggleKey: 'KeyM',
-    joystickRunThreshold: 0.85,
-    joystickRunExit:      0.70,
+
+    /* Sprint hysteresis — enter sprint high, exit lower so walk/run
+       never flickers at the threshold. */
+    joystickRunThreshold: 0.85,   // enter sprint
+    joystickRunExit:      0.70,   // exit sprint
     joystickDeadzone:     0.15,
   },
 
   look: {
+    /* Desktop mouse uses movementX / movementY — immediate, 1:1,
+       no smoothing. */
     mouseSensitivity: 0.0025,
+    /* Mobile right-side drag. */
     touchSensitivity: 0.0035,
     minPitch: -0.35,
     maxPitch:  1.15,
     startPitch: 0.20,
     startYaw:   0.0,
+    /* Camera position track — snappy, no floaty drag. */
     followLerp: 30,
     minCameraY: 0.30,
   },
@@ -313,6 +247,7 @@ const CONFIG = {
     targetHeight: 1.8,
     manualScale: 0.01,
     forceDoubleSide: false,
+
     colors: {
       enabled: true,
       replaceTextures: false,
@@ -322,6 +257,7 @@ const CONFIG = {
       shorts:   0x2f3542,
       slippers: 0xd94f4f,
     },
+
     colorParts: [
       { key: 'slippers', words: ['slipper', 'slip', 'shoe', 'sandal', 'boot'] },
       { key: 'shorts',   words: ['short', 'pant', 'trouser', 'jean'] },
@@ -334,16 +270,37 @@ const CONFIG = {
   movement: {
     walkSpeed: 3.8,
     runMultiplier: 2.2,
+    /* Player turns toward target at this rate (rad/s). */
     rotationSpeed: 16,
+
+    /* Strafing only slightly slower than forward. (Ignored in
+       robloxStyle mode.) */
     lateralSpeedMultiplier: 0.90,
     lateralRotationMultiplier: 1.0,
+
+    /* Exponential accel/decel: snappy start, quick controlled stop. */
     acceleration: 25,
     deceleration: 30,
+
     gravity: -20,
     jumpSpeed: 7.5,
     groundY: 0,
     backwardSpeedMultiplier: 0.85,
     backwardDotThreshold:   -0.5,
+
+    /* -----------------------------------------------------------------
+       ROBLOX-STYLE CHARACTER MOTION
+       true  = the character ALWAYS turns to face the direction it is
+               moving. No strafing, no back-pedal: pressing S spins the
+               character 180° and it runs at the camera. back.fbx is
+               loaded but never played.
+       false = the older ROS/CODM hybrid (strafe + backward-walk clip).
+       ----------------------------------------------------------------- */
+    robloxStyle: true,
+
+    /* Roblox keeps the character's facing when you stop moving.
+       Set true to restore the old "snap to camera yaw while idle". */
+    faceCameraWhenIdle: false,
   },
 
   camera: {
@@ -352,9 +309,34 @@ const CONFIG = {
     lookHeightFactor: 0.62,
     birdHeightFactor: 4.5,
     birdDistanceFactor: 3.2,
+
     collisionEnabled: true,
     collisionPadding: 0.25,
     collisionMinDistance: 0.40,
+
+    /* Roblox "classic" camera: while the character is moving, the camera
+       slowly swings around behind it. Off by default because it fights
+       manual mouse / right-screen look. Turn on for old-school feel. */
+    autoAlign: false,
+    autoAlignStrength: 3.0,
+  },
+
+  /* -------------------------------------------------------------------
+     BIRD VIEW — joystick-only overhead camera.
+     ------------------------------------------------------------------- */
+  birdView: {
+    joystickControlsCamera: true,
+
+    /* While the joystick is orbiting the bird camera the character holds
+       still. Set true if you want the joystick to drive the body too. */
+    moveCharacterWithJoystick: false,
+
+    orbitSpeed: 2.4,      // rad/s at full stick deflection
+    pitchSpeed: 1.5,      // rad/s
+    minPitch: 0.15,       // ~ near-horizontal
+    maxPitch: 1.52,       // ~ straight down
+    distanceScale: 5.5,   // × character height
+    followLerp: 8,
   },
 
   animation: {
@@ -381,8 +363,10 @@ const CONFIG = {
     minGripDistance: 0.06,
     fingerSearchDepth: 5,
     fallbackGripOffset: 0.10,
+
     holdOffset: { x: 0.080, y: -0.005, z: 0.035 },
     holdRotation: { x: 87, y: 12, z: 180 },
+
     handBoneTiers: [
       ['righthand', 'handright', 'wrighthand', 'rhand', 'handr',
        'bip01rhand', 'biprhand', 'handr02', 'handr2'],
@@ -630,6 +614,7 @@ if (CONFIG.debug.showHelpers) {
   scene.add(axesHelper);
 }
 
+/* Camera-collidable props (ground is intentionally excluded). */
 const cameraCollidables = [];
 
 const markerGeo = new THREE.ConeGeometry(0.25, 0.9, 8);
@@ -647,7 +632,7 @@ for (const [x, z] of markerPositions) {
 }
 
 /* =====================================================================
-   CSS2D label renderer
+   CSS2D label renderer (floating "E" prompts)
    ===================================================================== */
 const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(window.innerWidth, window.innerHeight);
@@ -658,16 +643,9 @@ labelRenderer.domElement.style.pointerEvents = 'none';
 labelRenderer.domElement.style.zIndex = '15';
 document.body.appendChild(labelRenderer.domElement);
 
-/* Detect "fake landscape" (iOS-style CSS rotation). */
-function isFakeLandscape() {
-  return window.matchMedia('(orientation: portrait) and (pointer: coarse)').matches;
-}
-
 function onViewportResize() {
-  let w = window.innerWidth;
-  let h = window.innerHeight;
-  if (isFakeLandscape()) { const t = w; w = h; h = t; }
-
+  const w = window.innerWidth;
+  const h = window.innerHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -678,9 +656,6 @@ window.addEventListener('resize', onViewportResize);
 window.addEventListener('orientationchange', () => {
   setTimeout(onViewportResize, 60);
   setTimeout(onViewportResize, 350);
-});
-window.matchMedia('(orientation: portrait)').addEventListener?.('change', () => {
-  setTimeout(onViewportResize, 60);
 });
 
 /* =====================================================================
@@ -769,178 +744,74 @@ window.addEventListener('keydown', (e) => {
 });
 
 /* =====================================================================
-   MOBILE FULLSCREEN + LANDSCAPE LOCK
+   MOBILE FULLSCREEN + LANDSCAPE LOCK  (automatic)
    ===================================================================== */
 const isMobileDevice =
   isTouchDevice || /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent);
 
-let fsActive = false;
-let fsAttempts = 0;
-const FS_MAX_ATTEMPTS = 6;
-const FS_EVENTS = ['pointerup', 'touchend', 'click', 'keydown'];
+let fullscreenKicked = false;
 
-const supportsFullscreen = !!(
-  document.documentElement.requestFullscreen ||
-  document.documentElement.webkitRequestFullscreen ||
-  document.documentElement.webkitRequestFullScreen ||
-  document.documentElement.msRequestFullscreen
-);
+async function enterFullscreenLandscape() {
+  if (fullscreenKicked) return;
+  fullscreenKicked = true;
 
-function isFullscreenNow() {
-  return !!(document.fullscreenElement || document.webkitFullscreenElement);
-}
-
-function requestFs() {
-  const el = document.documentElement;
-  if (isFullscreenNow()) return Promise.resolve(true);
-  const req = el.requestFullscreen ||
-              el.webkitRequestFullscreen ||
-              el.webkitRequestFullScreen ||
-              el.msRequestFullscreen;
-  if (!req) return Promise.resolve(false);
   try {
-    const p = req.call(el, { navigationUI: 'hide' });
-    return (p && p.then)
-      ? p.then(() => true).catch(() => false)
-      : Promise.resolve(true);
-  } catch (e) { return Promise.resolve(false); }
-}
-
-function lockLandscape() {
-  try {
-    if (screen.orientation && typeof screen.orientation.lock === 'function') {
-      return screen.orientation.lock('landscape')
-        .then(() => true).catch(() => false);
+    const el = document.documentElement;
+    const alreadyFs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!alreadyFs) {
+      const req =
+        el.requestFullscreen ||
+        el.webkitRequestFullscreen ||
+        el.webkitRequestFullScreen ||
+        el.msRequestFullscreen;
+      if (req) {
+        const p = req.call(el, { navigationUI: 'hide' });
+        if (p && typeof p.then === 'function') await p.catch(() => {});
+      }
     }
-    const fn = screen.lockOrientation ||
-               screen.mozLockOrientation ||
-               screen.msLockOrientation;
-    if (fn) { fn.call(screen, 'landscape'); return Promise.resolve(true); }
-  } catch (e) { /* unsupported */ }
-  return Promise.resolve(false);
-}
-
-async function goFullscreenLandscape() {
-  const ok = await requestFs();
-  if (ok) {
-    fsActive = true;
-    await lockLandscape();
-    [50, 250, 600, 1200].forEach(t => setTimeout(onViewportResize, t));
+  } catch (err) {
+    console.warn('Fullscreen request was blocked:', err);
   }
-  return ok;
+
+  try {
+    const so = screen.orientation;
+    if (so && typeof so.lock === 'function') {
+      await so.lock('landscape').catch(() => {});
+    } else if (typeof screen.lockOrientation === 'function') {
+      screen.lockOrientation('landscape');
+    } else if (typeof screen.mozLockOrientation === 'function') {
+      screen.mozLockOrientation('landscape');
+    } else if (typeof screen.msLockOrientation === 'function') {
+      screen.msLockOrientation('landscape');
+    }
+  } catch (err) {
+    console.warn('Orientation lock not available:', err);
+  }
+
+  onViewportResize();
 }
 
 if (isMobileDevice) {
-  const kick = async () => {
-    if (fsActive || fsAttempts >= FS_MAX_ATTEMPTS) return;
-    fsAttempts++;
-    if (await goFullscreenLandscape()) {
-      FS_EVENTS.forEach(ev => window.removeEventListener(ev, kick, true));
-    }
+  const kickFullscreen = () => {
+    enterFullscreenLandscape();
+    window.removeEventListener('touchend', kickFullscreen);
+    window.removeEventListener('click', kickFullscreen);
+    window.removeEventListener('pointerup', kickFullscreen);
   };
-  FS_EVENTS.forEach(ev => window.addEventListener(ev, kick, true));
+  window.addEventListener('touchend', kickFullscreen, { passive: true });
+  window.addEventListener('pointerup', kickFullscreen, { passive: true });
+  window.addEventListener('click', kickFullscreen);
 
-  const onFsChange = () => {
-    const fs = isFullscreenNow();
-    fsActive = !!fs;
-    if (!fs) {
-      fsAttempts = 0;
-      FS_EVENTS.forEach(ev => window.addEventListener(ev, kick, true));
-    }
-    setTimeout(onViewportResize, 80);
-    setTimeout(onViewportResize, 400);
-  };
-  document.addEventListener('fullscreenchange', onFsChange);
-  document.addEventListener('webkitfullscreenchange', onFsChange);
+  document.addEventListener('fullscreenchange', () => {
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!fs) fullscreenKicked = false;
+    setTimeout(onViewportResize, 60);
+  });
 }
 
 /* =====================================================================
-   PAUSE MENU
-   ===================================================================== */
-const pauseOverlay = document.getElementById('pause-overlay');
-const resumeBtn    = document.getElementById('resume-btn');
-const exitBtn      = document.getElementById('exit-btn');
-
-let gamePaused = false;
-let hasInteracted = false;
-
-function setPaused(p) {
-  if (gamePaused === p) return;
-  gamePaused = p;
-
-  if (p) {
-    InputState.moveX = 0; InputState.moveZ = 0; InputState.run = false;
-    InputState.jumpPressed = false;
-    InputState.toggleCamera = false;
-    InputState.interactPressed = false;
-    joystickEnd();
-  } else {
-    /* Flush clock so we don't get a huge delta on resume. */
-    clock.getDelta();
-  }
-
-  pauseOverlay.style.display = p ? 'flex' : 'none';
-  document.body.classList.toggle('paused', p);
-
-  setTimeout(onViewportResize, 30);
-  setTimeout(onViewportResize, 300);
-}
-
-async function onResume() {
-  const ok = await goFullscreenLandscape();
-  setPaused(false);
-  if (ok) fsAttempts = 0;
-}
-resumeBtn.addEventListener('click', (e) => { e.stopPropagation(); onResume(); });
-resumeBtn.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); onResume(); }, { passive: false });
-
-function onExit() {
-  try {
-    if (isFullscreenNow()) {
-      const fn = document.exitFullscreen || document.webkitExitFullscreen;
-      if (fn) fn.call(document);
-    }
-  } catch (_) {}
-  setPaused(true);
-  setTimeout(() => {
-    try { window.close(); } catch (_) {}
-    setTimeout(() => {
-      try { window.location.replace('about:blank'); } catch (_) {}
-    }, 150);
-  }, 80);
-}
-exitBtn.addEventListener('click', (e) => { e.stopPropagation(); onExit(); });
-exitBtn.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); onExit(); }, { passive: false });
-
-/* Auto-pause when fullscreen is exited. */
-document.addEventListener('fullscreenchange', () => {
-  const fs = isFullscreenNow();
-  if (fs) setPaused(false);
-  else if (isMobileDevice && hasInteracted) setPaused(true);
-});
-document.addEventListener('webkitfullscreenchange', () => {
-  const fs = isFullscreenNow();
-  if (fs) setPaused(false);
-  else if (isMobileDevice && hasInteracted) setPaused(true);
-});
-
-/* Auto-pause if the first gesture failed to enter fullscreen. */
-window.addEventListener('pointerup', () => {
-  if (hasInteracted) return;
-  hasInteracted = true;
-  if (!isMobileDevice || !supportsFullscreen) return;
-  setTimeout(() => { if (!isFullscreenNow()) setPaused(true); }, 700);
-}, { capture: true });
-
-window.addEventListener('touchend', () => {
-  if (hasInteracted) return;
-  hasInteracted = true;
-  if (!isMobileDevice || !supportsFullscreen) return;
-  setTimeout(() => { if (!isFullscreenNow()) setPaused(true); }, 700);
-}, { capture: true, passive: true });
-
-/* =====================================================================
-   JOYSTICK
+   JOYSTICK  (movement only — LEFT side of screen)
+   Includes sprint hysteresis so walk/run never flickers.
    ===================================================================== */
 const Joystick = { active: false, originX: 0, originY: 0, maxRadius: 45 };
 
@@ -1017,6 +888,7 @@ joystickZone.addEventListener('touchend', (e) => {
 }, { passive: false });
 joystickZone.addEventListener('touchcancel', joystickEnd);
 
+/* Mouse fallback so the joystick is testable on desktop. */
 let mouseJoystickDown = false;
 joystickZone.addEventListener('mousedown', (e) => {
   mouseJoystickDown = true;
@@ -1028,7 +900,11 @@ window.addEventListener('mousemove', (e) => { if (mouseJoystickDown) joystickMov
 window.addEventListener('mouseup', () => { if (mouseJoystickDown) { mouseJoystickDown = false; joystickEnd(); } });
 
 /* =====================================================================
-   CAMERA LOOK
+   CAMERA LOOK  —  RIGHT half of screen (mobile) / mouse (desktop)
+   ---------------------------------------------------------------------
+   In third-person mode, the look input rotates the camera.
+   In bird-view mode, look input is IGNORED — the joystick drives the
+   overhead camera instead.
    ===================================================================== */
 const cameraZone = document.getElementById('camera-zone');
 
@@ -1036,7 +912,7 @@ let lookTouchId = null;
 let lookLastX = 0, lookLastY = 0;
 
 cameraZone.addEventListener('touchstart', (e) => {
-  if (lookTouchId !== null) return;
+  if (lookTouchId !== null) return;       // one look finger at a time
   const t = e.changedTouches[0];
   lookTouchId = t.identifier;
   lookLastX = t.clientX;
@@ -1071,11 +947,17 @@ function endLookTouch(e) {
 cameraZone.addEventListener('touchend', endLookTouch, { passive: false });
 cameraZone.addEventListener('touchcancel', endLookTouch, { passive: false });
 
+/* ---------------------------------------------------------------------
+   DESKTOP MOUSE — automatic pointer capture
+   ---------------------------------------------------------------------
+   Rotation uses movementX / movementY so it works IMMEDIATELY with no
+   click. Pointer Lock is requested automatically (on load, on first user
+   gesture, and re-acquired after any loss) for cursor hiding.
+   Clicking is never required to look around.
+   ------------------------------------------------------------------- */
 function isUIElement(el) {
   if (!el || !el.closest) return false;
-  return !!(el.closest('.mobile-btn') ||
-            el.closest('#joystick-zone') ||
-            el.closest('#pause-overlay'));
+  return !!(el.closest('.mobile-btn') || el.closest('#joystick-zone'));
 }
 
 function tryLockPointer() {
@@ -1087,12 +969,15 @@ function tryLockPointer() {
   }
 }
 
+/* Attempt an immediate lock (may be blocked until user gesture). */
 tryLockPointer();
 
+/* Retry on the first user interaction of any kind — one time only. */
 ['click', 'mousedown', 'keydown', 'touchstart'].forEach((evt) => {
   window.addEventListener(evt, tryLockPointer, { once: true, passive: true });
 });
 
+/* Re-lock after loss (Esc, tab change, etc.) on the next user gesture. */
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement || document.webkitPointerLockElement;
   if (!locked) {
@@ -1101,9 +986,12 @@ document.addEventListener('pointerlockchange', () => {
   }
 });
 
+/* Mouse movement rotates the camera — immediate, 1:1, no smoothing.
+   Works WITH or WITHOUT pointer lock (movementX/movementY are always
+   available on the mousemove event). Ignored in bird-view mode. */
 window.addEventListener('mousemove', (e) => {
   if (!cameraController) return;
-  if (isUIElement(e.target)) return;
+  if (isUIElement(e.target)) return;           // don't rotate over buttons
   const dx = e.movementX || 0;
   const dy = e.movementY || 0;
   if (dx === 0 && dy === 0) return;
@@ -1113,6 +1001,7 @@ window.addEventListener('mousemove', (e) => {
   );
 });
 
+/* --- Action buttons --- */
 function bindHoldButton(el, onDown, onUp) {
   el.addEventListener('touchstart', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
   el.addEventListener('touchend',   (e) => { onUp();   el.classList.remove('active'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
@@ -1832,6 +1721,13 @@ class AnimationController {
 
 /* =====================================================================
    PLAYER CONTROLLER
+   ---------------------------------------------------------------------
+   KEY MODEL (Roblox-style):
+     - CAMERA yaw/pitch controlled by mouse / right-screen touch.
+     - The character ALWAYS turns to face the direction it is moving.
+       Pressing S spins the character 180° and it runs toward the camera.
+     - No strafing, no back-pedal, no strafe speed penalty.
+     - While idle the character keeps its last facing (configurable).
    ===================================================================== */
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -1841,8 +1737,8 @@ class PlayerController {
     this.mixer = new THREE.AnimationMixer(model);
     this.animationController = new AnimationController(this.mixer, clips);
     this.animationController.onPickupFinished = () => this.endPickup();
-    this.velocity = new THREE.Vector3(0, 0, 0);
-    this.horizontalVelocity = new THREE.Vector3(0, 0, 0);
+    this.velocity = new THREE.Vector3(0, 0, 0);            // vertical (jump/gravity)
+    this.horizontalVelocity = new THREE.Vector3(0, 0, 0);  // smoothed XZ
     this.grounded = true;
     this.facingAngle = 0;
     this.stateReadout = document.getElementById('state-readout');
@@ -1951,11 +1847,22 @@ class PlayerController {
     }
     const cfg = CONFIG.movement;
 
+    /* -----------------------------------------------------------------
+       INPUT SMOOTHING
+       -45 exp rate → near-immediate joystick response; tiny low-pass
+       keeps analog feel.
+       ----------------------------------------------------------------- */
     const inputLerp = 1 - Math.exp(-45 * delta);
     this._smoothX += (input.moveX - this._smoothX) * inputLerp;
     this._smoothZ += (input.moveZ - this._smoothZ) * inputLerp;
     this._smoothRun = input.run;
 
+    /* -----------------------------------------------------------------
+       MOVEMENT FRAME = CAMERA YAW
+       Joystick UP → away from camera (camera forward).
+       Joystick RIGHT → camera's right.
+       Diagonal normalized → no diagonal speed boost.
+       ----------------------------------------------------------------- */
     const camYaw = cameraController ? cameraController.yaw : 0;
     this._forward.set(Math.sin(camYaw), 0, Math.cos(camYaw));
     this._right.set(-Math.cos(camYaw), 0, Math.sin(camYaw));
@@ -1972,12 +1879,21 @@ class PlayerController {
     const isMoving = moveLenSq > 1e-6;
     if (isMoving) this._moveDir.normalize();
 
+    /* Slight speed reduction for pure sideways strafe.
+       Roblox-style motion has no strafe penalty — the character turns
+       into every direction it moves, so it always runs at full speed. */
     const forwardness   = isMoving ? Math.abs(this._moveDir.dot(this._forward)) : 1;
     const lateralAmount = 1 - forwardness;
-    const lateralSpeedMul = THREE.MathUtils.lerp(1, cfg.lateralSpeedMultiplier, lateralAmount);
+    const lateralSpeedMul = cfg.robloxStyle
+      ? 1
+      : THREE.MathUtils.lerp(1, cfg.lateralSpeedMultiplier, lateralAmount);
 
+    /* Backward = moving opposite to camera forward.
+       Roblox-style NEVER back-pedals: pressing "back" just turns the
+       character around, so the backward clip is never used. */
     let isBackward = false;
-    if (isMoving &&
+    if (!cfg.robloxStyle &&
+        isMoving &&
         this.cameraMode === 'third_person' &&
         this.animationController.hasBackwardClip()) {
       isBackward = this._moveDir.dot(this._forward) < cfg.backwardDotThreshold;
@@ -1989,6 +1905,10 @@ class PlayerController {
     if (isBackward) targetSpeed *= cfg.backwardSpeedMultiplier;
     else if (isRunning) targetSpeed *= cfg.runMultiplier;
 
+    /* -----------------------------------------------------------------
+       ACCELERATION / DECELERATION
+       Exponential approach — snappy start, quick controlled stop.
+       ----------------------------------------------------------------- */
     const targetVx = this._moveDir.x * targetSpeed;
     const targetVz = this._moveDir.z * targetSpeed;
     const rate = isMoving ? cfg.acceleration : cfg.deceleration;
@@ -1999,13 +1919,21 @@ class PlayerController {
     this.root.position.x += this.horizontalVelocity.x * delta;
     this.root.position.z += this.horizontalVelocity.z * delta;
 
-    let targetAngle;
+    /* -----------------------------------------------------------------
+       PLAYER HORIZONTAL FACING  —  ROBLOX RULES
+         Moving → face the ACTUAL movement direction. W/A/S/D all turn
+                  the character; there is no back-pedal and no strafe.
+         Idle   → keep the last facing (Roblox default). Enable
+                  CONFIG.movement.faceCameraWhenIdle for the old
+                  "snap to camera yaw while standing still" behaviour.
+       ----------------------------------------------------------------- */
+    let targetAngle = this.facingAngle;
     if (isMoving && !isBackward) {
       targetAngle = Math.atan2(this._moveDir.x, this._moveDir.z);
-    } else if (cameraController) {
+    } else if (isBackward) {
+      targetAngle = cameraController ? cameraController.yaw : this.facingAngle;
+    } else if (cfg.faceCameraWhenIdle && cameraController) {
       targetAngle = cameraController.yaw;
-    } else {
-      targetAngle = this.facingAngle;
     }
     this.facingAngle = rotateTowardsAngle(
       this.facingAngle, targetAngle,
@@ -2013,6 +1941,15 @@ class PlayerController {
     );
     this.root.rotation.y = this.facingAngle;
 
+    /* Optional Roblox "classic camera": swing the camera around behind
+       the character while it is moving. Off by default. */
+    if (CONFIG.camera.autoAlign && cameraController &&
+        this.cameraMode === 'third_person' && isMoving && !isBackward) {
+      const alignT = 1 - Math.exp(-CONFIG.camera.autoAlignStrength * delta);
+      cameraController.yaw = lerpAngle(cameraController.yaw, this.facingAngle, alignT);
+    }
+
+    /* Vertical motion (gravity + jump) — unchanged. */
     const wasGrounded = this.grounded;
     this.velocity.y += cfg.gravity * delta;
     this.root.position.y += this.velocity.y * delta;
@@ -2139,7 +2076,15 @@ function rotateTowardsAngle(current, target, maxDelta) {
 }
 
 /* =====================================================================
-   CAMERA CONTROLLER
+   CAMERA CONTROLLER  —  ORBIT (Roblox classic / ROS style)
+   ---------------------------------------------------------------------
+   - Camera orbits the player at a user-controlled yaw + pitch.
+   - yaw is UN-INVERTED: swiping right on the look area rotates the
+     view to the right.
+   - Snappy follow (followLerp = 30) — glued to the player, no floaty lag.
+   - Ray-cast collision pulls the camera in when a prop blocks the view
+     and eases the distance back out when clear.
+   - BIRD VIEW is joystick-only: mouse / touch look is ignored there.
    ===================================================================== */
 class CameraController {
   constructor(camera, target, info) {
@@ -2170,9 +2115,22 @@ class CameraController {
     this._rayDir  = new THREE.Vector3();
 
     this._smoothedDistance = this.distance;
+
+    /* --- Bird-view orbit state (joystick driven) ------------------- */
+    const birdH = info.height * CONFIG.camera.birdHeightFactor;
+    const birdD = info.height * CONFIG.camera.birdDistanceFactor;
+    this.birdDistance = info.height * CONFIG.birdView.distanceScale;
+    this.birdPitch = Math.atan2(birdH, birdD);
+    this.birdYaw = CONFIG.look.startYaw;
   }
 
+  /* Called from look input. yaw wraps 360°, pitch is clamped.
+     NOTE: yaw is DEcreased by dYaw so a rightward swipe/mouse move
+     rotates the view to the right (un-inverted).
+     BIRD VIEW IS JOYSTICK-ONLY — mouse / touch look is ignored there. */
   rotate(dYaw, dPitch) {
+    if (this.mode === 'bird_view' && CONFIG.birdView.joystickControlsCamera) return;
+
     this.yaw -= dYaw;
     if (this.yaw >  Math.PI) this.yaw -= Math.PI * 2;
     if (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
@@ -2181,9 +2139,32 @@ class CameraController {
     );
   }
 
-  setMode(mode) { if (this.mode === mode) return; this.mode = mode; this._initialized = false; }
+  setMode(mode) {
+    if (this.mode === mode) return;
+    /* Entering bird view: start from the current third-person heading. */
+    if (mode === 'bird_view') this.birdYaw = this.yaw;
+    this.mode = mode;
+    this._initialized = false;
+    this._smoothedDistance = this.distance;
+  }
   toggleMode() { this.setMode(this.mode === 'third_person' ? 'bird_view' : 'third_person'); return this.mode; }
   snap() { this._initialized = false; }
+
+  /* -------------------------------------------------------------------
+     BIRD VIEW CONTROL — joystick only.
+       x = stick right (+1)  → orbit the camera clockwise
+       z = stick forward (+1) → raise the camera toward top-down
+     ------------------------------------------------------------------- */
+  orbitBird(x, z, delta) {
+    this.birdYaw -= x * CONFIG.birdView.orbitSpeed * delta;
+    if (this.birdYaw >  Math.PI) this.birdYaw -= Math.PI * 2;
+    if (this.birdYaw < -Math.PI) this.birdYaw += Math.PI * 2;
+
+    this.birdPitch = THREE.MathUtils.clamp(
+      this.birdPitch + z * CONFIG.birdView.pitchSpeed * delta,
+      CONFIG.birdView.minPitch, CONFIG.birdView.maxPitch
+    );
+  }
 
   update(delta) {
     if (this.mode === 'third_person') this._updateThirdPerson(delta);
@@ -2210,10 +2191,13 @@ class CameraController {
     const cosP = Math.cos(this.pitch);
     const sinP = Math.sin(this.pitch);
 
+    /* Desired camera direction (before collision).
+       With yaw = 0 the camera sits at -Z, looking toward +Z. */
     let camX = lookAtX - Math.sin(this.yaw) * this.distance * cosP;
     let camY = lookAtY + this.distance * sinP;
     let camZ = lookAtZ - Math.cos(this.yaw) * this.distance * cosP;
 
+    /* ---------------- CAMERA COLLISION ---------------- */
     let targetDist = this.distance;
     if (CONFIG.camera.collisionEnabled && cameraCollidables.length > 0) {
       this._rayFrom.set(lookAtX, lookAtY, lookAtZ);
@@ -2234,6 +2218,7 @@ class CameraController {
       }
     }
 
+    /* Snap-in on block (no clipping), ease-out when clear. */
     if (targetDist < this._smoothedDistance) {
       this._smoothedDistance = targetDist;
     } else {
@@ -2259,20 +2244,24 @@ class CameraController {
       this.currentTargetPos.copy(t);
       this._initialized = true;
     } else {
-      const lerp = 1 - Math.exp(-CONFIG.look.followLerp * delta);
+      const lerp = 1 - Math.exp(-CONFIG.birdView.followLerp * delta);
       this.currentTargetPos.lerp(t, lerp);
     }
 
+    const lookX = this.currentTargetPos.x;
+    const lookY = this.currentTargetPos.y + this.lookHeight;
+    const lookZ = this.currentTargetPos.z;
+
+    const cosP = Math.cos(this.birdPitch);
+    const sinP = Math.sin(this.birdPitch);
+    const d    = this.birdDistance;
+
     this.camera.position.set(
-      this.currentTargetPos.x,
-      this.currentTargetPos.y + this.birdHeight,
-      this.currentTargetPos.z + this.birdDistance
+      lookX - Math.sin(this.birdYaw) * d * cosP,
+      lookY + d * sinP,
+      lookZ - Math.cos(this.birdYaw) * d * cosP
     );
-    this.camera.lookAt(
-      this.currentTargetPos.x,
-      this.currentTargetPos.y + this.lookHeight,
-      this.currentTargetPos.z
-    );
+    this.camera.lookAt(lookX, lookY, lookZ);
   }
 }
 let cameraController = null;
@@ -2289,13 +2278,6 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = Math.min(clock.getDelta(), 0.1);
   const elapsed = clock.elapsedTime;
-
-  if (gamePaused) {
-    renderer.render(scene, camera);
-    labelRenderer.render(scene, camera);
-    return;
-  }
-
   readKeyboardInto(InputState);
 
   if (player) {
@@ -2305,13 +2287,35 @@ function animate() {
       cameraController.update(0.016);
       cameraReadout.textContent = `camera: ${cameraController.mode}`;
 
+      /* Once the player exists, try pointer lock again — loading is done
+         and any user gesture since page load has registered. */
       if (!isTouchDevice) tryLockPointer();
     }
     if (InputState.toggleCamera) {
       const newMode = cameraController.toggleMode();
-      cameraReadout.textContent = `camera: ${newMode.replace('_', '-')}`;
+      cameraReadout.textContent = (newMode === 'bird_view')
+        ? 'camera: bird-view (joystick)'
+        : 'camera: third-person';
       InputState.toggleCamera = false;
     }
+
+    /* -----------------------------------------------------------------
+       BIRD VIEW: the movement joystick drives the CAMERA, not the body.
+       The right-half look zone is already ignored by rotate().
+       ----------------------------------------------------------------- */
+    if (cameraController.mode === 'bird_view' &&
+        CONFIG.birdView.joystickControlsCamera &&
+        Joystick.active) {
+
+      cameraController.orbitBird(InputState.moveX, InputState.moveZ, delta);
+
+      if (!CONFIG.birdView.moveCharacterWithJoystick) {
+        InputState.moveX = 0;
+        InputState.moveZ = 0;
+        InputState.run   = false;
+      }
+    }
+
     pickupManager.update(delta, elapsed, player);
     player.update(delta, InputState, camera, cameraController);
     cameraController.update(delta);
@@ -2338,6 +2342,15 @@ console.log('RENDER LOOP STARTED');
 console.log(
   `GLOBAL TOON GRAPHICS: enabled=${CONFIG.toon.enabled} | bands=${CONFIG.toon.gradientSteps} | ` +
   `outlines=${CONFIG.toon.outlineEnabled} | thickness=${CONFIG.toon.outlineThickness}m`
+);
+console.log(
+  `ROBLOX-STYLE MOTION: robloxStyle=${CONFIG.movement.robloxStyle} | ` +
+  `faceCameraWhenIdle=${CONFIG.movement.faceCameraWhenIdle} | ` +
+  `autoAlignCamera=${CONFIG.camera.autoAlign}`
+);
+console.log(
+  `BIRD VIEW: joystickControlsCamera=${CONFIG.birdView.joystickControlsCamera} | ` +
+  `moveCharacterWithJoystick=${CONFIG.birdView.moveCharacterWithJoystick}`
 );
 initCharacter();
 animate();
