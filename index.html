@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -14,114 +15,115 @@
   }
   #app-canvas { display: block; width: 100%; height: 100%; cursor: none; }
 
-  #loading-screen {
-    position: fixed; inset: 0; background: #1a1a1a; color: #eee;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    z-index: 100; transition: opacity 0.4s ease;
-  }
-  #loading-screen h2 { margin: 0 0 10px; font-size: 20px; }
-  #loading-screen p { margin: 4px 0; font-size: 13px; color: #aaa; max-width: 480px; text-align: center; line-height: 1.4; }
-  #loading-bar-track { width: 260px; height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 14px; }
-  #loading-bar-fill { height: 100%; width: 0%; background: #4caf50; transition: width 0.15s ease; }
-  #loading-error { color: #ff6b6b; font-size: 13px; margin-top: 14px; max-width: 500px; text-align: center; white-space: pre-line; }
+#loading-screen {
+position: fixed; inset: 0; background: #1a1a1a; color: #eee;
+display: flex; flex-direction: column; align-items: center; justify-content: center;
+z-index: 100; transition: opacity 0.4s ease;
+}
+#loading-screen h2 { margin: 0 0 10px; font-size: 20px; }
+#loading-screen p { margin: 4px 0; font-size: 13px; color: #aaa; max-width: 480px; text-align: center; line-height: 1.4; }
+#loading-bar-track { width: 260px; height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 14px; }
+#loading-bar-fill { height: 100%; width: 0%; background: #4caf50; transition: width 0.15s ease; }
+#loading-error { color: #ff6b6b; font-size: 13px; margin-top: 14px; max-width: 500px; text-align: center; white-space: pre-line; }
 
-  #hud {
-    position: fixed; top: 10px; left: 10px; color: #fff; font-size: 12px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8); z-index: 10; pointer-events: none; line-height: 1.5;
-  }
-  #hud .hint { color: #ffe98a; }
+#hud {
+position: fixed; top: 10px; left: 10px; color: #fff; font-size: 12px;
+text-shadow: 0 1px 2px rgba(0,0,0,0.8); z-index: 10; pointer-events: none; line-height: 1.5;
+}
+#hud .hint { color: #ffe98a; }
 
-  .pickup-prompt-wrap { position: relative; pointer-events: none; }
-  .pickup-prompt {
-    display: flex; align-items: center; gap: 7px;
-    padding: 4px 11px 4px 5px;
-    background: rgba(12, 16, 24, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 999px;
-    color: #fff; font-size: 12px; font-weight: 600;
-    letter-spacing: 0.02em; white-space: nowrap;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
-    transform-origin: 50% 100%;
-    animation: promptBob 1.4s ease-in-out infinite;
-    transition: opacity 0.16s ease, transform 0.16s ease;
-  }
-  .pickup-prompt .key {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 21px; height: 21px; border-radius: 6px;
-    background: #ffffff; color: #12161c;
-    font-size: 12px; font-weight: 800;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.45), inset 0 -2px 0 rgba(0,0,0,0.18);
-  }
-  .pickup-prompt.hidden { opacity: 0; transform: translateY(6px) scale(0.9); }
-  @keyframes promptBob { 0%, 100% { margin-top: 0px; } 50% { margin-top: -5px; } }
+.pickup-prompt-wrap { position: relative; pointer-events: none; }
+.pickup-prompt {
+display: flex; align-items: center; gap: 7px;
+padding: 4px 11px 4px 5px;
+background: rgba(12, 16, 24, 0.8);
+border: 1px solid rgba(255, 255, 255, 0.35);
+border-radius: 999px;
+color: #fff; font-size: 12px; font-weight: 600;
+letter-spacing: 0.02em; white-space: nowrap;
+box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+transform-origin: 50% 100%;
+animation: promptBob 1.4s ease-in-out infinite;
+transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.pickup-prompt .key {
+display: inline-flex; align-items: center; justify-content: center;
+width: 21px; height: 21px; border-radius: 6px;
+background: #ffffff; color: #12161c;
+font-size: 12px; font-weight: 800;
+box-shadow: 0 1px 0 rgba(0,0,0,0.45), inset 0 -2px 0 rgba(0,0,0,0.18);
+}
+.pickup-prompt.hidden { opacity: 0; transform: translateY(6px) scale(0.9); }
+@keyframes promptBob { 0%, 100% { margin-top: 0px; } 50% { margin-top: -5px; } }
 
-  #mobile-controls { position: fixed; inset: 0; z-index: 20; display: none; pointer-events: none; }
+#mobile-controls { position: fixed; inset: 0; z-index: 20; display: none; pointer-events: none; }
 
-  /* Right half of screen: swipe to look + rotate player (CODM style) */
-  #camera-zone {
-    position: absolute;
-    top: 0; right: 0;
-    width: 50%; height: 100%;
-    pointer-events: auto;
-    z-index: 1;
-    touch-action: none;
-  }
+/* Right half of screen: swipe to look + rotate player (CODM style) */
+#camera-zone {
+position: absolute;
+top: 0; right: 0;
+width: 50%; height: 100%;
+pointer-events: auto;
+z-index: 1;
+touch-action: none;
+}
 
-  #joystick-zone {
-    position: absolute; left: 30px; bottom: 30px;
-    width: 130px; height: 130px;
-    pointer-events: auto;
-    z-index: 3;
-  }
-  #joystick-base {
-    position: absolute; width: 130px; height: 130px; border-radius: 50%;
-    background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.35); box-sizing: border-box;
-  }
-  #joystick-stick {
-    position: absolute; left: 35px; top: 35px; width: 60px; height: 60px; border-radius: 50%;
-    background: rgba(255, 255, 255, 0.55); border: 2px solid rgba(255, 255, 255, 0.8);
-    box-sizing: border-box; transform: translate(0px, 0px);
-    transition: background 0.12s ease, border-color 0.12s ease;
-  }
-  #joystick-stick.running {
-    background: rgba(255, 225, 130, 0.75);
-    border-color: rgba(255, 235, 160, 0.95);
-  }
-  #action-zone {
-    position: absolute; right: 30px; bottom: 30px;
-    display: flex; flex-direction: column;
-    gap: 14px; align-items: center;
-    pointer-events: auto;
-    z-index: 3;
-  }
-  .mobile-btn {
-    width: 74px; height: 74px; border-radius: 50%;
-    background: rgba(255, 255, 255, 0.25); border: 2px solid rgba(255, 255, 255, 0.5);
-    color: #fff; font-size: 12px; font-weight: bold;
-    display: flex; align-items: center; justify-content: center;
-    box-sizing: border-box; text-align: center; line-height: 1.1;
-  }
-  .mobile-btn.active { background: rgba(255, 255, 255, 0.55); }
-  #cam-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(255, 215, 100, 0.3); border-color: rgba(255, 215, 100, 0.6); }
-  #use-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(120, 235, 150, 0.3); border-color: rgba(120, 235, 150, 0.65); }
+#joystick-zone {
+position: absolute; left: 30px; bottom: 30px;
+width: 130px; height: 130px;
+pointer-events: auto;
+z-index: 3;
+}
+#joystick-base {
+position: absolute; width: 130px; height: 130px; border-radius: 50%;
+background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.35); box-sizing: border-box;
+}
+#joystick-stick {
+position: absolute; left: 35px; top: 35px; width: 60px; height: 60px; border-radius: 50%;
+background: rgba(255, 255, 255, 0.55); border: 2px solid rgba(255, 255, 255, 0.8);
+box-sizing: border-box; transform: translate(0px, 0px);
+transition: background 0.12s ease, border-color 0.12s ease;
+}
+#joystick-stick.running {
+background: rgba(255, 225, 130, 0.75);
+border-color: rgba(255, 235, 160, 0.95);
+}
+#action-zone {
+position: absolute; right: 30px; bottom: 30px;
+display: flex; flex-direction: column;
+gap: 14px; align-items: center;
+pointer-events: auto;
+z-index: 3;
+}
+.mobile-btn {
+width: 74px; height: 74px; border-radius: 50%;
+background: rgba(255, 255, 255, 0.25); border: 2px solid rgba(255, 255, 255, 0.5);
+color: #fff; font-size: 12px; font-weight: bold;
+display: flex; align-items: center; justify-content: center;
+box-sizing: border-box; text-align: center; line-height: 1.1;
+}
+.mobile-btn.active { background: rgba(255, 255, 255, 0.55); }
+#cam-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(255, 215, 100, 0.3); border-color: rgba(255, 215, 100, 0.6); }
+#use-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(120, 235, 150, 0.3); border-color: rgba(120, 235, 150, 0.65); }
 
-  #rotate-overlay {
-    position: fixed; inset: 0; z-index: 300;
-    background: #10141a; color: #fff;
-    display: none; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 16px; text-align: center; padding: 24px;
-    font-size: 15px; letter-spacing: 0.02em;
-  }
-  #rotate-overlay .icon { font-size: 48px; line-height: 1; animation: rotateHint 2.2s ease-in-out infinite; }
-  @keyframes rotateHint {
-    0%, 35%   { transform: rotate(0deg); }
-    65%, 100% { transform: rotate(90deg); }
-  }
-  @media (orientation: portrait) and (pointer: coarse) {
-    #rotate-overlay { display: flex; }
-  }
+#rotate-overlay {
+position: fixed; inset: 0; z-index: 300;
+background: #10141a; color: #fff;
+display: none; flex-direction: column;
+align-items: center; justify-content: center;
+gap: 16px; text-align: center; padding: 24px;
+font-size: 15px; letter-spacing: 0.02em;
+}
+#rotate-overlay .icon { font-size: 48px; line-height: 1; animation: rotateHint 2.2s ease-in-out infinite; }
+@keyframes rotateHint {
+0%, 35%   { transform: rotate(0deg); }
+65%, 100% { transform: rotate(90deg); }
+}
+@media (orientation: portrait) and (pointer: coarse) {
+#rotate-overlay { display: flex; }
+}
 </style>
+
 <base target="_blank">
 </head>
 <body>
@@ -175,6 +177,7 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 
 /* =====================================================================
    CONFIG
@@ -341,6 +344,86 @@ const CONFIG = {
 
     /* Positional follow smoothing (larger = snappier). */
     followLerp: 8,
+  },
+
+  /* -------------------------------------------------------------------
+     NPC — a single AI companion that idles / wanders the field, and
+     sprints to the player the moment the player picks something up.
+     It also performs a fully PROCEDURAL "reach out the hand" gesture
+     when it gets close to the player (no extra animation file needed).
+     ------------------------------------------------------------------- */
+  npc: {
+    enabled: true,
+    spawnPos: { x: 6, z: -4 },
+    wanderRadius: 11,
+    idleMin: 1.2, idleMax: 3.2,
+    walkMin: 2.5, walkMax: 5.5,
+    /* Maximum time the NPC will keep chasing before giving up.
+       Bump this if the player is very fast — the NPC no longer stops
+       on its own; it only stops when the hand physically tags the
+       player (see handContactDistance) or when this timer expires. */
+    chaseDuration: 20.0,
+
+    /* Procedural hand-reach gesture (driven by the built-in CCD IK). */
+    reachDistance: 2.4,
+    reachFadeIn: 0.35,
+    reachFadeOut: 0.60,
+    reachTargetHeightFactor: 0.62,  // fraction of character height (chest)
+
+    /* Distance (metres) at which the reaching hand is considered to
+       have "touched" the player. Kept very tight so the chase only
+       ends when the hand is literally on the player's body. */
+    handContactDistance: 0.15,
+
+    /* Fallback "body tag" distance (metres) between the NPC root and
+       the player root. If the hand IK can't quite reach (or lags
+       behind), the NPC is considered to have tagged the player once
+       it has physically closed to this body-to-body distance. This
+       guarantees the chase always terminates on contact. */
+    bodyContactDistance: 0.80,
+
+    /* -----------------------------------------------------------------
+       NATURAL PURSUIT — makes the chase feel like a real runner
+       tracking a target, not a scripted AI mirroring the player.
+
+       reactionTime:
+         Seconds of perceptual lag. The NPC does NOT see the player's
+         current position; it sees a low-pass-filtered version of it.
+         Sudden direction changes (jukes) therefore take this long to
+         register — the NPC can be "tricked" by a fast cut.
+
+       predictionTime:
+         Seconds of lead. The NPC aims at where it THINKS the player
+         will be (delayed position + delayed velocity × lead), instead
+         of chasing the exact past footsteps.
+
+       maxPredictionDistance:
+         Hard cap on the lead offset so a very fast player cannot send
+         the NPC wildly off-course when it reads a bad velocity spike.
+       ----------------------------------------------------------------- */
+    reactionTime: 0.45,
+    predictionTime: 0.55,
+    maxPredictionDistance: 3.5,
+
+    /* -----------------------------------------------------------------
+       CARTOON "!" DETECTION MARKER
+       A red, toon-shaded exclamation mark pops above the NPC's head the
+       moment the NPC detects the player picking up the object, then
+       fades out shortly after — mimicking a manga / cartoon "spotted
+       you!" reaction. It always billboards toward the camera so it
+       reads clearly from any viewing angle.
+       ----------------------------------------------------------------- */
+    exclaimColor: 0xff2b2b,
+    /* Height of the marker above the NPC's feet, as a multiple of the
+       character height. 1.05 tucks the "!" right above the head —
+       the group origin sits just past the top of the model so the
+       dot of the "!" lands a hair above the hair/head geometry. */
+    exclaimHeightFactor: 1.05,
+    /* Overall world-space size of the marker (metres). Bumped ~30%
+       from 0.35 so the "!" reads clearly at gameplay distance. */
+    exclaimSize: 0.455,
+    /* How long the pop stays on screen, in seconds. */
+    exclaimDuration: 0.75,
   },
 
   animation: {
@@ -1248,6 +1331,7 @@ let characterRoot = null;
 let characterInfo = null;
 let player = null;
 let armIK = null;
+let npc = null;
 
 function normalizeCharacter(model) {
   model.position.set(0, 0, 0);
@@ -1644,6 +1728,8 @@ async function initCharacter() {
     }
 
     player = new PlayerController(characterRoot, model, clips, characterInfo, pickupInfo, armIK);
+
+    if (CONFIG.npc.enabled) spawnNPC(model, clips);
 
     if (clips.pickup && CONFIG.pickup.enabled) {
       pickupManager.populate();
@@ -2317,11 +2403,709 @@ let cameraController = null;
 const cameraReadout = document.getElementById('camera-readout');
 
 /* =====================================================================
+   NPC CONTROLLER
+   ---------------------------------------------------------------------
+   - Wanders the field using the same idle / run clips as the player
+     (the run clip is time-scaled down so it also works as a walk).
+   - When the player picks something up, the NPC sprints at the player
+     for a few seconds (see `alertToPlayer()`).
+   - Runs a lightweight CCD IK chain on the right arm so the hand
+     extends TOWARD the player when they get close.  This is 100% code
+     — no extra FBX / clip is required.
+
+   HOW THE PROCEDURAL REACH WORKS (recap / how to tweak):
+     1. We locate the right hand bone with the same tier matcher used
+        by the player pickup system (CONFIG.pickup.handBoneTiers).
+     2. `buildArmChain(handBone)` gives us the forearm, upper arm and
+        (optionally) the shoulder/clavicle.
+     3. A small child "grip point" is attached to the hand using the
+        fingertip analysis helper — same maths as the player grip.
+     4. Each frame, if the player is within CONFIG.npc.reachDistance,
+        the IK target is set to the player's chest and the chain's
+        weight smoothly fades in / out (CONFIG.npc.reachFadeIn/Out).
+     5. SimpleIKChain.update() runs AFTER the AnimationMixer update so
+        the IK pose is layered on top of the idle/run animation.
+
+   Tuning tips:
+     - If the arm barely moves, lower CONFIG.pickup.ikMaxStep (it is
+       the per-iteration radian clamp) or raise CONFIG.pickup.ikIterations.
+     - If the wrong bone moves, add more keywords to
+       CONFIG.pickup.handBoneTiers so `findBone` picks the correct arm.
+     - reachTargetHeightFactor lets you aim at the chest / head / waist.
+     - Increase CONFIG.npc.reachDistance to have the NPC react earlier.
+   ===================================================================== */
+class NPCController {
+  constructor(root, model, clips, info) {
+    this.root = root;
+    this.model = model;
+    this.info = info;
+
+    this.mixer = new THREE.AnimationMixer(model);
+    this.actions = {
+      idle: this.mixer.clipAction(clips.idle),
+      run:  this.mixer.clipAction(clips.run),
+    };
+    this.actions.idle.setLoop(THREE.LoopRepeat, Infinity);
+    this.actions.run.setLoop(THREE.LoopRepeat, Infinity);
+    for (const key of Object.keys(this.actions)) {
+      const a = this.actions[key];
+      a.enabled = true;
+      a.setEffectiveTimeScale(1);
+      a.setEffectiveWeight(0);
+    }
+    this.actions.idle.setEffectiveWeight(1);
+    this.actions.idle.play();
+    this.currentState = 'idle';
+
+    this.facingAngle = Math.random() * Math.PI * 2;
+    this.root.rotation.y = this.facingAngle;
+    this.horizontalVelocity = new THREE.Vector3();
+
+    this.walkSpeed = CONFIG.movement.walkSpeed * 0.55;
+    /* Chase speed matches the player's sprint speed exactly 1:1. The
+       NPC does NOT cheat by running faster — it has to earn the tag
+       through prediction and natural pursuit. */
+    this.runSpeed  = CONFIG.movement.walkSpeed * CONFIG.movement.runMultiplier;
+
+    this.homeX = root.position.x;
+    this.homeZ = root.position.z;
+    this.targetPos = new THREE.Vector3(this.homeX, 0, this.homeZ);
+    this._pickWanderTarget();
+
+    this.walking = false;
+    this.stateTimer = 0;
+    this.stateDuration = CONFIG.npc.idleMin + Math.random() * (CONFIG.npc.idleMax - CONFIG.npc.idleMin);
+
+    this.chasing = false;
+    this.chaseTimer = 0;
+
+    /* ---- Procedural hand reach rig ---- */
+    this.reachIK = null;
+    this.reachWeight = 0;
+    this._ikTargetWorld = new THREE.Vector3();
+    this._handWorld = new THREE.Vector3();
+
+    /* Smoothed chase target. Instead of snapping directly onto the
+       player's exact coordinates (which reads like a scripted AI
+       teleport), we lazily steer toward a PREDICTED future position.
+       Small turn-rate limit + reaction-time lag makes the pursuit
+       feel like a natural runner tracking a target. */
+    this._chaseTarget = new THREE.Vector3(this.homeX, 0, this.homeZ);
+    this._chaseTargetInit = false;
+
+    /* Pursuit state — velocity estimate for the real player, plus a
+       "delayed perception" copy the NPC actually uses. */
+    this._lastPlayerPos = new THREE.Vector3(this.homeX, 0, this.homeZ);
+    this._hasLastPlayerPos = false;
+    this._playerVel = new THREE.Vector3();
+    this._delayedPlayerPos = new THREE.Vector3(this.homeX, 0, this.homeZ);
+    this._delayedPlayerVel = new THREE.Vector3();
+
+    /* Smoothed steering angle (radians). The raw direction to the
+       current aim point is low-passed as an ANGLE — not as a vector —
+       before it drives the NPC's facing and velocity. This is what
+       keeps the motion smooth when the player jukes hard left/right
+       and the aim point briefly sweeps past the NPC: lerpAngle always
+       rotates the short way around and never passes through a
+       zero-length direction, so there is nothing to snap. */
+    this._steerAngle = this.facingAngle;
+
+    /* Straightness detector — tracks how steadily the player is
+       running. When the player is on a straight line, we let the NPC
+       steer more responsively so it hugs the player's track instead
+       of trailing behind with extra lag. When the player jukes
+       (fast direction change), straightness drops and the NPC
+       returns to the slower, juke-tricky steering. */
+    this._straightness = 1.0;
+    this._lastPlayerVelAngle = 0;
+    this._hasPlayerVelAngle = false;
+
+    /* Chase start ramp — 0 → 1 over roughly CHASE_RAMP_TIME seconds.
+       Drives the NPC's target speed from walkSpeed up to runSpeed, so
+       the animation clip naturally ramps from a walking cadence up to
+       a full sprint when the chase begins (idle → walk → run). */
+    this._chaseRamp = 0;
+
+    const handBone = findBone(model, CONFIG.pickup.handBoneTiers);
+    const armChain = handBone ? buildArmChain(handBone) : [];
+    if (handBone && armChain.length > 0) {
+      const gripLocal = computeFingertipLocalOffset(handBone);
+      const gripPoint = new THREE.Object3D();
+      gripPoint.name = 'NPCGripPoint';
+      gripPoint.position.copy(gripLocal);
+      handBone.add(gripPoint);
+      this.reachIK = new SimpleIKChain(
+        gripPoint, armChain,
+        CONFIG.pickup.ikIterations, CONFIG.pickup.ikMaxStep
+      );
+      console.log(`NPC: procedural reach rigged on ${armChain.length} bone(s): ` +
+        armChain.map((b) => b.name).join(' -> '));
+    } else {
+      console.warn('NPC: no arm chain detected — procedural reach disabled.');
+    }
+
+    /* ---- Cartoon "!" detection marker --------------------------------
+       Red, toon-shaded exclamation mark that pops above the NPC's head
+       when the NPC detects the player picking up the object. The design
+       mirrors the reference art: a front pillar + a back pillar (3D
+       echo), a front dot + a back dot, and three small spark triangles
+       radiating from the top-right. All pieces are flat extruded
+       shapes in the group's local XY plane and the whole group is
+       billboarded toward the camera in _updateExclaim(). Toon outlines
+       are applied automatically by the scene-wide toon system, which
+       gives the thick black cartoon borders. */
+    this._exclaimRoot = new THREE.Group();
+    this._exclaimRoot.name = 'NPCExclaim';
+    this._exclaimRoot.position.y = this.info.height * CONFIG.npc.exclaimHeightFactor;
+    this._exclaimRoot.visible = false;
+
+    const T = CONFIG.npc.exclaimSize;           // master size
+    const exMat = makeToonMaterial({ color: CONFIG.npc.exclaimColor });
+
+    /* Helper: tapered pillar as a flat 2D shape extruded slightly. */
+    function buildPillarGeo(bottomW, topW, height, depth) {
+      const s = new THREE.Shape();
+      const bw = bottomW * 0.5;
+      const tw = topW * 0.5;
+      s.moveTo(-bw, 0);
+      s.lineTo(bw, 0);
+      s.lineTo(tw, height);
+      s.lineTo(-tw, height);
+      s.closePath();
+      return new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false });
+    }
+
+    /* Helper: small triangle "spark" (flat, extruded). */
+    function buildSparkGeo(size, depth) {
+      const s = new THREE.Shape();
+      s.moveTo(-size * 0.5, 0);
+      s.lineTo(size * 0.5, 0);
+      s.lineTo(0, size);
+      s.closePath();
+      return new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false });
+    }
+
+    const plateDepth = T * 0.05;
+
+    /* Main pillar (front, center-right, slight lean). */
+    const mainPillar = new THREE.Mesh(
+      buildPillarGeo(T * 0.16, T * 0.11, T * 0.80, plateDepth),
+      exMat
+    );
+    mainPillar.position.set(T * 0.02, T * 0.20, 0);
+    mainPillar.rotation.z = THREE.MathUtils.degToRad(4);
+    mainPillar.castShadow = false;
+    mainPillar.receiveShadow = false;
+
+    /* Back pillar (echo, offset left and behind, slightly shorter). */
+    const backPillar = new THREE.Mesh(
+      buildPillarGeo(T * 0.15, T * 0.11, T * 0.72, plateDepth),
+      exMat
+    );
+    backPillar.position.set(-T * 0.13, T * 0.28, -T * 0.06);
+    backPillar.rotation.z = THREE.MathUtils.degToRad(7);
+    backPillar.castShadow = false;
+    backPillar.receiveShadow = false;
+
+    /* Main dot (front, larger). */
+    const mainDotGeo = new THREE.CylinderGeometry(
+      T * 0.075, T * 0.075, plateDepth, 20
+    );
+    mainDotGeo.rotateX(Math.PI / 2);
+    const mainDot = new THREE.Mesh(mainDotGeo, exMat);
+    mainDot.position.set(T * 0.02, T * 0.075, 0);
+    mainDot.castShadow = false;
+    mainDot.receiveShadow = false;
+
+    /* Back dot (echo, smaller, offset left). */
+    const backDotGeo = new THREE.CylinderGeometry(
+      T * 0.055, T * 0.055, plateDepth, 20
+    );
+    backDotGeo.rotateX(Math.PI / 2);
+    const backDot = new THREE.Mesh(backDotGeo, exMat);
+    backDot.position.set(-T * 0.18, T * 0.085, -T * 0.06);
+    backDot.castShadow = false;
+    backDot.receiveShadow = false;
+
+    /* Three spark triangles fanning out from the top-right. */
+    const spark1 = new THREE.Mesh(buildSparkGeo(T * 0.13, plateDepth), exMat);
+    spark1.position.set(T * 0.16, T * 0.86, 0);
+    spark1.rotation.z = THREE.MathUtils.degToRad(35);
+    spark1.castShadow = false;
+    spark1.receiveShadow = false;
+
+    const spark2 = new THREE.Mesh(buildSparkGeo(T * 0.13, plateDepth), exMat);
+    spark2.position.set(T * 0.26, T * 0.98, 0);
+    spark2.rotation.z = THREE.MathUtils.degToRad(-5);
+    spark2.castShadow = false;
+    spark2.receiveShadow = false;
+
+    const spark3 = new THREE.Mesh(buildSparkGeo(T * 0.13, plateDepth), exMat);
+    spark3.position.set(T * 0.30, T * 0.80, 0);
+    spark3.rotation.z = THREE.MathUtils.degToRad(-55);
+    spark3.castShadow = false;
+    spark3.receiveShadow = false;
+
+    this._exclaimRoot.add(mainPillar);
+    this._exclaimRoot.add(backPillar);
+    this._exclaimRoot.add(mainDot);
+    this._exclaimRoot.add(backDot);
+    this._exclaimRoot.add(spark1);
+    this._exclaimRoot.add(spark2);
+    this._exclaimRoot.add(spark3);
+
+    this.root.add(this._exclaimRoot);
+    /* Belt-and-braces: the patched Object3D.add would normally run
+       applyToonGraphics on this subtree automatically (because root
+       is inside the scene), but we call it explicitly so the "!" is
+       guaranteed to pick up the same toon material + thick black
+       outline treatment used by every other prop in the scene. */
+    applyToonGraphics(this._exclaimRoot);
+
+    /* Runtime state for the pop animation. */
+    this._exclaimActive = false;
+    this._exclaimTimer = 0;
+
+    this._dir = new THREE.Vector3();
+  }
+
+  _pickWanderTarget() {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * CONFIG.npc.wanderRadius;
+    this.targetPos.set(this.homeX + Math.cos(a) * r, 0, this.homeZ + Math.sin(a) * r);
+  }
+
+  _crossFadeTo(name, duration) {
+    if (this.currentState === name) return;
+    if (!this.actions[name]) return;
+    const from = this.actions[this.currentState];
+    const to = this.actions[name];
+    to.enabled = true;
+    to.setEffectiveWeight(1);
+    to.setEffectiveTimeScale(1);
+    to.reset();
+    to.play();
+    from.crossFadeTo(to, duration, false);
+    this.currentState = name;
+  }
+
+  /* Called whenever the player performs a successful grab. */
+  alertToPlayer() {
+    this.chasing = true;
+    this.chaseTimer = CONFIG.npc.chaseDuration;
+    /* Force the smoothed chase target AND the velocity tracker to
+       re-seed from the player's CURRENT state the next time update()
+       runs, so the NPC does not briefly aim at a stale point from
+       the previous chase. */
+    this._chaseTargetInit = false;
+    this._hasLastPlayerPos = false;
+    /* Reset the smoothed steering angle so the NPC does not carry a
+       stale direction from before the previous chase. */
+    this._steerAngle = this.facingAngle;
+    /* Start the new chase assuming the player is running straight —
+       the straightness detector will pull this down if they juke. */
+    this._straightness = 1.0;
+    this._hasPlayerVelAngle = false;
+    /* Begin the idle → walk → run speed ramp from scratch. */
+    this._chaseRamp = 0;
+    /* Fire the cartoon "!" pop above the head. */
+    this._triggerExclaim();
+  }
+
+  /* Show the "!" marker with a fresh pop animation. */
+  _triggerExclaim() {
+    if (!this._exclaimRoot) return;
+    this._exclaimActive = true;
+    this._exclaimTimer = 0;
+    this._exclaimRoot.scale.setScalar(0.01);
+    this._exclaimRoot.visible = true;
+  }
+
+  /* Immediately hide the marker (used when the chase aborts). */
+  _hideExclaim() {
+    if (!this._exclaimRoot) return;
+    this._exclaimActive = false;
+    this._exclaimTimer = 0;
+    this._exclaimRoot.visible = false;
+    this._exclaimRoot.scale.setScalar(1);
+  }
+
+  /* Pop-in / hold / pop-out animation + billboard toward the camera. */
+  _updateExclaim(delta) {
+    if (!this._exclaimRoot || !this._exclaimActive) return;
+
+    this._exclaimTimer += delta;
+    const dur = CONFIG.npc.exclaimDuration;
+    const popIn = 0.15;
+    const popOut = 0.12;
+
+    let scale = 1;
+    if (this._exclaimTimer < popIn) {
+      /* ease-out-back: overshoots then settles */
+      const t = this._exclaimTimer / popIn;
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      scale = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    } else if (this._exclaimTimer > dur - popOut) {
+      const t = (this._exclaimTimer - (dur - popOut)) / popOut;
+      scale = 1 - t * 0.9;
+    }
+    this._exclaimRoot.scale.setScalar(Math.max(0.001, scale));
+
+    /* Billboard: always turn the "!" toward the camera.
+       Object3D.lookAt on a non-camera object makes +Z point at the
+       target, and Three.js handles the parent's rotation for us. */
+    this._exclaimRoot.lookAt(camera.position);
+
+    if (this._exclaimTimer >= dur) {
+      this._exclaimActive = false;
+      this._exclaimRoot.visible = false;
+      this._exclaimRoot.scale.setScalar(1);
+    }
+  }
+
+  update(delta, player) {
+    const cfg = CONFIG.movement;
+    let wantMoving = false;
+    let speed = this.walkSpeed;
+    let targetX = this.targetPos.x;
+    let targetZ = this.targetPos.z;
+
+    /* --- Chase state ------------------------------------------------
+       Chase ONLY runs while the player is actually HOLDING an item
+       (the slipper). The NPC relentlessly runs TOWARD the player at
+       full speed and NEVER stops on its own — the only ways the chase
+       ends are:
+         1. The reaching hand physically touches the player (detected
+            in _updateReach via handContactDistance), OR
+         2. The player drops / throws the item, OR
+         3. The chase timer runs out. */
+    const playerHolding = !!(player && player.heldItem);
+    if (this.chasing && playerHolding) {
+      const dt = Math.max(delta, 1e-4);
+
+      /* --- 1. Estimate the player's real instantaneous velocity --- */
+      if (!this._hasLastPlayerPos) {
+        this._lastPlayerPos.copy(player.root.position);
+        this._delayedPlayerPos.copy(player.root.position);
+        this._delayedPlayerVel.set(0, 0, 0);
+        this._hasLastPlayerPos = true;
+      } else {
+        this._playerVel.set(
+          (player.root.position.x - this._lastPlayerPos.x) / dt,
+          0,
+          (player.root.position.z - this._lastPlayerPos.z) / dt
+        );
+        this._lastPlayerPos.copy(player.root.position);
+      }
+
+      /* --- 2. Reaction-time delay -------------------------------
+         The NPC does not see the current player — it sees a heavily
+         low-pass-filtered version. A fast direction change (a juke)
+         therefore takes ~reactionTime seconds to register, so the
+         NPC can be tricked by sudden cuts. */
+      const reactRate = 1 / Math.max(CONFIG.npc.reactionTime, 1e-3);
+      const reactLerp = 1 - Math.exp(-reactRate * delta);
+      this._delayedPlayerPos.x +=
+        (player.root.position.x - this._delayedPlayerPos.x) * reactLerp;
+      this._delayedPlayerPos.z +=
+        (player.root.position.z - this._delayedPlayerPos.z) * reactLerp;
+      this._delayedPlayerVel.x +=
+        (this._playerVel.x - this._delayedPlayerVel.x) * reactLerp;
+      this._delayedPlayerVel.z +=
+        (this._playerVel.z - this._delayedPlayerVel.z) * reactLerp;
+
+      /* --- Straightness detector ------------------------------
+         Track the direction of the player's real velocity. If it
+         stays stable (straight run), raise `_straightness` toward 1.
+         If it swings (juke), drive it toward 0. A slow low-pass on
+         the value keeps the steer-rate blend from chattering when
+         the angle signal is noisy. */
+      const playerSpeed = Math.hypot(this._playerVel.x, this._playerVel.z);
+      if (playerSpeed > 0.6) {
+        const velAngle = Math.atan2(this._playerVel.x, this._playerVel.z);
+        if (this._hasPlayerVelAngle) {
+          const angChange = Math.abs(angleDelta(this._lastPlayerVelAngle, velAngle));
+          const angRate = angChange / Math.max(delta, 1e-4);
+          /* angRate in rad/s: ~0 on a straight run, >3 rad/s on a juke. */
+          const targetStraight = THREE.MathUtils.clamp(1 - angRate / 3.0, 0, 1);
+          const straightLerp = 1 - Math.exp(-6.0 * delta);
+          this._straightness += (targetStraight - this._straightness) * straightLerp;
+        }
+        this._lastPlayerVelAngle = velAngle;
+        this._hasPlayerVelAngle = true;
+      }
+
+      /* --- 3. Predictive pursuit --------------------------------
+         Aim ahead of the perceived player using the perceived
+         velocity × predictionTime, capped so a bad velocity spike
+         cannot fling the target off-course. */
+      let leadX = this._delayedPlayerVel.x * CONFIG.npc.predictionTime;
+      let leadZ = this._delayedPlayerVel.z * CONFIG.npc.predictionTime;
+      const leadLen = Math.hypot(leadX, leadZ);
+      const maxLead = CONFIG.npc.maxPredictionDistance;
+      if (leadLen > maxLead) {
+        const s = maxLead / leadLen;
+        leadX *= s;
+        leadZ *= s;
+      }
+      const aimX = this._delayedPlayerPos.x + leadX;
+      const aimZ = this._delayedPlayerPos.z + leadZ;
+
+      /* --- 4. Light low-pass on the aim point ------------------
+         The aim point is already smooth (delayed pos + delayed vel
+         are both filtered), so this layer only needs to remove
+         micro-jitter. Rate raised from 4.0 → 6.5 so straight-line
+         runs do not accumulate extra positional lag. The real
+         jolt-guard is the steering-angle smoothing below. */
+      if (!this._chaseTargetInit) {
+        this._chaseTarget.set(aimX, 0, aimZ);
+        this._chaseTargetInit = true;
+      } else {
+        const trackLerp = 1 - Math.exp(-6.5 * delta);
+        this._chaseTarget.x += (aimX - this._chaseTarget.x) * trackLerp;
+        this._chaseTarget.z += (aimZ - this._chaseTarget.z) * trackLerp;
+      }
+      targetX = this._chaseTarget.x;
+      targetZ = this._chaseTarget.z;
+
+      /* Ramp the target speed from a walking pace up to a full sprint
+         over ~0.8 seconds. Because the animation clip's playback rate
+         is derived from speedNow / runSpeed further below, this makes
+         the NPC visually roll through idle → walk → run instead of
+         snapping into a full-speed run pose on the first chase frame. */
+      const CHASE_RAMP_TIME = 0.8;
+      this._chaseRamp = Math.min(1, this._chaseRamp + delta / CHASE_RAMP_TIME);
+      /* Ease-out ramp so the walk phase lingers a hair, then bursts
+         into the run — matches how a real pursuer accelerates. */
+      const easedRamp = 1 - Math.pow(1 - this._chaseRamp, 2);
+      speed = THREE.MathUtils.lerp(this.walkSpeed, this.runSpeed, easedRamp);
+
+      /* No time limit, no stop distance. The NPC relentlessly pursues
+         the player until one of these happens:
+           1. The reaching hand tags the player (see _updateReach),
+           2. The NPC body closes to bodyContactDistance,
+           3. The player drops / throws the object. */
+      wantMoving = true;
+    } else if (this.chasing && !playerHolding) {
+      /* Player dropped the item — abort chase and ignore them. */
+      this.chasing = false;
+      this._chaseRamp = 0;
+      this._chaseTargetInit = false;
+      this._hasLastPlayerPos = false;
+      this._hideExclaim();
+      this._pickWanderTarget();
+    }
+
+    /* --- Wander state machine (idle <-> walk) ----------------------- */
+    if (!this.chasing) {
+      this.stateTimer += delta;
+      if (this.walking) {
+        const d = Math.hypot(
+          this.targetPos.x - this.root.position.x,
+          this.targetPos.z - this.root.position.z
+        );
+        if (d < 0.45 || this.stateTimer > this.stateDuration) {
+          this.walking = false;
+          this.stateTimer = 0;
+          this.stateDuration = CONFIG.npc.idleMin +
+            Math.random() * (CONFIG.npc.idleMax - CONFIG.npc.idleMin);
+        } else {
+          wantMoving = true;
+          speed = this.walkSpeed;
+          targetX = this.targetPos.x;
+          targetZ = this.targetPos.z;
+        }
+      } else if (this.stateTimer > this.stateDuration) {
+        this.walking = true;
+        this.stateTimer = 0;
+        this.stateDuration = CONFIG.npc.walkMin +
+          Math.random() * (CONFIG.npc.walkMax - CONFIG.npc.walkMin);
+        this._pickWanderTarget();
+        targetX = this.targetPos.x;
+        targetZ = this.targetPos.z;
+      }
+    }
+
+    /* --- Steering + smoothed movement -------------------------------
+       The raw direction to the target is low-passed as an ANGLE (not a
+       vector) before it drives the NPC's facing and velocity. That is
+       what keeps the motion smooth during hard left↔right player
+       jukes: the aim point can sweep across the NPC without snapping
+       the NPC's facing or flipping its velocity, because lerpAngle
+       always rotates the short way around and never passes through a
+       zero-length direction. */
+    if (wantMoving) {
+      this._dir.set(targetX - this.root.position.x, 0, targetZ - this.root.position.z);
+      const len = this._dir.length();
+      if (len > 1e-4) {
+        this._dir.divideScalar(len);
+        const rawAngle = Math.atan2(this._dir.x, this._dir.z);
+
+        /* Steer rate is blended between "tricky/juke" (slow) and
+           "locked-on straight" (fast) using the straightness signal.
+           On straights the NPC steers precisely so it hugs the
+           player's track; on jukes the rate drops and the NPC carves
+           its previous heading for a moment — that lag is what makes
+           sudden direction changes work as a dodge. */
+        const steerRate = THREE.MathUtils.lerp(6.0, 14.0, this._straightness);
+        const angleLerp = 1 - Math.exp(-steerRate * delta);
+        this._steerAngle = lerpAngle(this._steerAngle, rawAngle, angleLerp);
+
+        this.facingAngle = rotateTowardsAngle(
+          this.facingAngle, this._steerAngle, cfg.rotationSpeed * delta);
+      }
+      const targetVx = Math.sin(this._steerAngle) * speed;
+      const targetVz = Math.cos(this._steerAngle) * speed;
+      /* (speed is either walkSpeed or a ramped value during chase) */
+      const lerp = 1 - Math.exp(-cfg.acceleration * delta);
+      this.horizontalVelocity.x += (targetVx - this.horizontalVelocity.x) * lerp;
+      this.horizontalVelocity.z += (targetVz - this.horizontalVelocity.z) * lerp;
+    } else {
+      const lerp = 1 - Math.exp(-cfg.deceleration * delta);
+      this.horizontalVelocity.x += (0 - this.horizontalVelocity.x) * lerp;
+      this.horizontalVelocity.z += (0 - this.horizontalVelocity.z) * lerp;
+    }
+
+    this.root.position.x += this.horizontalVelocity.x * delta;
+    this.root.position.z += this.horizontalVelocity.z * delta;
+    this.root.position.y = cfg.groundY;
+    this.root.rotation.y = this.facingAngle;
+
+    /* --- Animation state (idle <-> run, run doubles as walk) -------- */
+    const speedNow = Math.hypot(this.horizontalVelocity.x, this.horizontalVelocity.z);
+    const moving = speedNow > 0.15;
+    this._crossFadeTo(moving ? 'run' : 'idle', 0.28);
+
+    if (this.currentState === 'run') {
+      const ref = this.chasing ? this.runSpeed : this.walkSpeed;
+      /* Widen the low-end clamp so the very start of a chase (when
+         speedNow is only ~walkSpeed) plays the run clip at a clearly
+         walking cadence (~0.35x), then ramps smoothly to full speed
+         as the NPC accelerates. This is what makes the animation read
+         as idle → walk → run instead of snapping straight to a run. */
+      const scale = THREE.MathUtils.clamp(speedNow / Math.max(ref, 0.001), 0.35, 1.6);
+      this.actions.run.setEffectiveTimeScale(scale);
+    }
+
+    this.mixer.update(delta);
+
+    /* --- Cartoon "!" detection marker pop animation ---------------- */
+    this._updateExclaim(delta);
+
+    /* --- Procedural reach (runs AFTER mixer so it layers on top) ---- */
+    this._updateReach(delta, player);
+  }
+
+  _updateReach(delta, player) {
+    if (!this.reachIK || !player) return;
+
+    /* Hand reach is active while the NPC is chasing the player
+       (i.e. the player is holding the slipper). Once the player is
+       within reachDistance the arm snaps out; once the NPC gets
+       point-blank it stays fully extended so it can tag them. When
+       the player is not being chased the arm smoothly relaxes back. */
+    let wantReach = false;
+    if (this.chasing) {
+      const d = Math.hypot(
+        player.root.position.x - this.root.position.x,
+        player.root.position.z - this.root.position.z
+      );
+      wantReach = d < CONFIG.npc.reachDistance;
+    }
+
+    const target = wantReach ? 1 : 0;
+    const rate = (target > this.reachWeight)
+      ? 1 / Math.max(CONFIG.npc.reachFadeIn, 1e-3)
+      : 1 / Math.max(CONFIG.npc.reachFadeOut, 1e-3);
+    if (this.reachWeight < target) {
+      this.reachWeight = Math.min(target, this.reachWeight + rate * delta);
+    } else if (this.reachWeight > target) {
+      this.reachWeight = Math.max(target, this.reachWeight - rate * delta);
+    }
+
+    this.reachIK.weight = this.reachWeight;
+    if (this.reachWeight <= 0.001) return;
+
+    this.root.updateMatrixWorld(true);
+    this._ikTargetWorld.copy(player.root.position);
+    this._ikTargetWorld.y += this.info.height * CONFIG.npc.reachTargetHeightFactor;
+    this.reachIK.target.copy(this._ikTargetWorld);
+    this.reachIK.update();
+    this.root.updateMatrixWorld(true);
+
+    /* Hand contact ends the chase: if the reaching hand actually
+       touches the player while they are still holding the item, the
+       NPC stops chasing and returns to wandering.
+
+       Two independent checks make this reliable:
+         1. HAND tag  — the IK hand effector is on the player's chest.
+         2. BODY tag  — the NPC root has physically closed to the
+                        player's body (fallback when the IK can't
+                        quite reach, so the chase ALWAYS terminates). */
+    if (this.chasing) {
+      this.reachIK.effector.getWorldPosition(this._handWorld);
+
+      const chestY = player.root.position.y +
+        this.info.height * CONFIG.npc.reachTargetHeightFactor;
+      const hx = this._handWorld.x - player.root.position.x;
+      const hy = this._handWorld.y - chestY;
+      const hz = this._handWorld.z - player.root.position.z;
+      const handContact = Math.sqrt(hx * hx + hy * hy + hz * hz);
+
+      const bx = this.root.position.x - player.root.position.x;
+      const bz = this.root.position.z - player.root.position.z;
+      const bodyContact = Math.hypot(bx, bz);
+
+      const tagged =
+        (handContact < CONFIG.npc.handContactDistance) ||
+        (bodyContact < CONFIG.npc.bodyContactDistance);
+
+      if (tagged) {
+        this.chasing = false;
+        this.chaseTimer = 0;
+        /* Reset the IK so the arm relaxes back to the animation pose
+           the moment the tag lands. */
+        this.reachWeight = 0;
+        this.reachIK.weight = 0;
+        this._pickWanderTarget();
+        console.log('NPC: tagged player — chase ended.');
+      }
+    }
+  }
+}
+
+function spawnNPC(sourceModel, clips) {
+  const npcModel = skeletonClone(sourceModel);
+  npcModel.traverse((o) => {
+    if (o.isMesh || o.isSkinnedMesh) {
+      o.castShadow = true;
+      o.receiveShadow = false;
+      o.frustumCulled = false;
+    }
+  });
+
+  const npcRoot = new THREE.Group();
+  npcRoot.name = 'NPCRoot';
+  npcRoot.position.set(
+    CONFIG.npc.spawnPos.x,
+    CONFIG.movement.groundY,
+    CONFIG.npc.spawnPos.z
+  );
+  npcRoot.add(npcModel);
+  scene.add(npcRoot);
+
+  npc = new NPCController(npcRoot, npcModel, clips, characterInfo);
+  console.log('NPC spawned at', npcRoot.position);
+}
+
+/* =====================================================================
    MAIN LOOP
    ===================================================================== */
 const clock = new THREE.Clock();
 let framesSinceReady = 0;
 let visibilityChecked = false;
+let lastPickedCount = 0;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -2354,6 +3138,16 @@ function animate() {
     pickupManager.update(delta, elapsed, player);
     player.update(delta, InputState, camera, cameraController);
     cameraController.update(delta);
+
+    /* NPC: wander around, and sprint to the player whenever the player
+       successfully grabs / picks up an item. */
+    if (npc) {
+      npc.update(delta, player);
+      if (pickedCount !== lastPickedCount) {
+        lastPickedCount = pickedCount;
+        npc.alertToPlayer();
+      }
+    }
   }
 
   renderer.render(scene, camera);
@@ -2387,8 +3181,13 @@ console.log(
   `BIRD VIEW: fixed overhead follow camera | ` +
   `pitch=${CONFIG.birdView.pitch} | distanceScale=${CONFIG.birdView.distanceScale}`
 );
+console.log(
+  `NPC: enabled=${CONFIG.npc.enabled} | wanderRadius=${CONFIG.npc.wanderRadius} | ` +
+  `reachDistance=${CONFIG.npc.reachDistance}`
+);
 initCharacter();
 animate();
 </script>
+
 </body>
 </html>
