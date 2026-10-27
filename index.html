@@ -4,166 +4,473 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>3D Character Controller - Three.js (Roblox-style + Fixed Bird-View)</title>
+<!-- Added to the Home Screen, the game opens as a standalone, browser-free
+     app. The play gate counts that as fullscreen (iPhone has no other way). -->
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>3D Character Controller - Main Menu</title>
+
+<!-- Base page rules, loading screen and rotate overlay are shared with game.html -->
+<link rel="stylesheet" href="style/common.css" />
+
 <style>
-  html, body {
-    margin: 0; padding: 0; overflow: hidden;
-    width: 100%; height: 100%;
-    background: #87ceeb;
-    font-family: Arial, Helvetica, sans-serif;
-    -webkit-user-select: none; user-select: none; touch-action: none;
+  [hidden] { display: none !important; }
+
+  body {
+    /* Lobby backdrop: flat sky + grass. The horizon sits at 69% so the 3D
+       character (script/lobby.js) stands on the grass. */
+    background: linear-gradient(180deg, #87ceeb 0%, #87ceeb 69%, #6fae5e 69%, #5f9f50 100%);
+    font-family: "Arial Rounded MT Bold", "Trebuchet MS", "Comic Sans MS", "Chalkboard SE", Arial, sans-serif;
   }
-  #app-canvas { display: block; width: 100%; height: 100%; cursor: none; }
 
-#loading-screen {
-position: fixed; inset: 0; background: #1a1a1a; color: #eee;
-display: flex; flex-direction: column; align-items: center; justify-content: center;
-z-index: 100; transition: opacity 0.4s ease;
-}
-#loading-screen h2 { margin: 0 0 10px; font-size: 20px; }
-#loading-screen p { margin: 4px 0; font-size: 13px; color: #aaa; max-width: 480px; text-align: center; line-height: 1.4; }
-#loading-bar-track { width: 260px; height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 14px; }
-#loading-bar-fill { height: 100%; width: 0%; background: #4caf50; transition: width 0.15s ease; }
-#loading-error { color: #ff6b6b; font-size: 13px; margin-top: 14px; max-width: 500px; text-align: center; white-space: pre-line; }
+  /* ---------- Loading screen (game-style: green field, chase animation) ---------- */
+  #loading-screen {
+    background: #5f9f50;
+    justify-content: flex-end;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  #loading-scene {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+    pointer-events: none;
+  }
+  #loading-panel {
+    position: relative;
+    z-index: 2;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 8px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: #fff;
+    font-family: "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif;
+    max-width: 88vw;
+    margin-bottom: 6px;
+  }
+  /* Loading text now sits UNDER the bar (see #loading-bar-info) and is
+     smaller, so the detailed bar and percentage stay the focus. */
+  .load-title {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    color: #fff;
+    text-shadow:
+      1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000,
+      1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000,
+      0 2px 0 #000;
+    animation: loadPulse 1.4s ease-in-out infinite;
+  }
+  #loading-bar-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    margin-top: 4px;
+  }
+  #loading-percent {
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: #b8ffb8;
+    text-shadow: 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000;
+  }
+  @keyframes loadPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+  /* Detailed loading bar: thick black frame, dark track, glossy green
+     fill, inset highlight line on top, and 10% tick-mark lines layered
+     above the fill so progress reads clearly at a glance. */
+  #loading-bar-track {
+    position: relative;
+    width: 280px;
+    height: 16px;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.72);
+    border: 3px solid #000;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 0;
+    box-shadow:
+      inset 0 3px 5px rgba(0, 0, 0, 0.65),
+      0 2px 0 rgba(0, 0, 0, 0.55);
+  }
+  /* Segment tick lines (10% increments), drawn over everything. */
+  #loading-bar-track::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    border-radius: inherit;
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(10% - 1px),
+      rgba(255, 255, 255, 0.18) calc(10% - 1px),
+      rgba(255, 255, 255, 0.18) 10%
+    );
+  }
+  #loading-bar-fill {
+    position: relative;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(180deg, #a8ffa8 0%, #5fd35f 45%, #2e9e3e 100%);
+    border-radius: 999px;
+    box-shadow: 0 0 6px rgba(120, 255, 140, 0.55);
+  }
+  /* Top highlight line for a glossy tube look. */
+  #loading-bar-fill::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    top: 2px;
+    height: 30%;
+    border-radius: 999px;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    pointer-events: none;
+  }
+  #loading-error {
+    color: #ffb0b0;
+    font-size: 12px;
+    max-width: 90vw;
+    text-align: center;
+    white-space: pre-line;
+    line-height: 1.35;
+  }
+  #retry-btn {
+    margin-top: 4px; padding: 6px 16px;
+    border: 2px solid #fff; border-radius: 8px;
+    background: #3fbf4f; color: #fff;
+    font: inherit; font-size: 12px; font-weight: 800;
+    letter-spacing: 0.06em; cursor: pointer;
+    box-shadow: 0 3px 0 #000;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  #retry-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #000; }
 
-#hud {
-position: fixed; top: 10px; left: 10px; color: #fff; font-size: 12px;
-text-shadow: 0 1px 2px rgba(0,0,0,0.8); z-index: 10; pointer-events: none; line-height: 1.5;
-}
-#hud .hint { color: #ffe98a; }
+  /* ---------- Black-out transition (loading -> main menu) ---------- */
+  #black-transition {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  #black-transition.active {
+    opacity: 1;
+  }
 
-.pickup-prompt-wrap { position: relative; pointer-events: none; }
-.pickup-prompt {
-display: flex; align-items: center; gap: 7px;
-padding: 4px 11px 4px 5px;
-background: rgba(12, 16, 24, 0.8);
-border: 1px solid rgba(255, 255, 255, 0.35);
-border-radius: 999px;
-color: #fff; font-size: 12px; font-weight: 600;
-letter-spacing: 0.02em; white-space: nowrap;
-box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
-transform-origin: 50% 100%;
-animation: promptBob 1.4s ease-in-out infinite;
-transition: opacity 0.16s ease, transform 0.16s ease;
-}
-.pickup-prompt .key {
-display: inline-flex; align-items: center; justify-content: center;
-width: 21px; height: 21px; border-radius: 6px;
-background: #ffffff; color: #12161c;
-font-size: 12px; font-weight: 800;
-box-shadow: 0 1px 0 rgba(0,0,0,0.45), inset 0 -2px 0 rgba(0,0,0,0.18);
-}
-.pickup-prompt.hidden { opacity: 0; transform: translateY(6px) scale(0.9); }
-@keyframes promptBob { 0%, 100% { margin-top: 0px; } 50% { margin-top: -5px; } }
+  /* ---------- Main menu shell ---------- */
+  #main-menu {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px; box-sizing: border-box;
+    z-index: 1;   /* above #lobby-canvas (z-index 0), below loading / rotate screens */
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 0.35s ease, visibility 0s linear 0.35s;
+  }
+  #main-menu.ready {
+    opacity: 1; visibility: visible; pointer-events: auto;
+    transition: opacity 0.35s ease, visibility 0s;
+  }
+  body.leaving #main-menu { opacity: 0; transition: opacity 0.18s ease; }
 
-#mobile-controls { position: fixed; inset: 0; z-index: 20; display: none; pointer-events: none; }
+  .menu-view { display: none; flex-direction: column; align-items: center; gap: 16px; }
+  #main-menu[data-view="menu"] #view-menu { display: block; }
+  #main-menu[data-view="settings"] #view-settings { display: flex; }
 
-/* Right half of screen: swipe to look + rotate player (CODM style) */
-#camera-zone {
-position: absolute;
-top: 0; right: 0;
-width: 50%; height: 100%;
-pointer-events: auto;
-z-index: 1;
-touch-action: none;
-}
+  /* Settings card opens over a dimmed + blurred lobby. */
+  #main-menu[data-view="settings"] {
+    background: rgba(16, 24, 48, 0.38);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
 
-#joystick-zone {
-position: absolute; left: 30px; bottom: 30px;
-width: 130px; height: 130px;
-pointer-events: auto;
-z-index: 3;
-}
-#joystick-base {
-position: absolute; width: 130px; height: 130px; border-radius: 50%;
-background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.35); box-sizing: border-box;
-}
-#joystick-stick {
-position: absolute; left: 35px; top: 35px; width: 60px; height: 60px; border-radius: 50%;
-background: rgba(255, 255, 255, 0.55); border: 2px solid rgba(255, 255, 255, 0.8);
-box-sizing: border-box; transform: translate(0px, 0px);
-transition: background 0.12s ease, border-color 0.12s ease;
-}
-#joystick-stick.running {
-background: rgba(255, 225, 130, 0.75);
-border-color: rgba(255, 235, 160, 0.95);
-}
-#action-zone {
-position: absolute; right: 30px; bottom: 30px;
-display: flex; flex-direction: column;
-gap: 14px; align-items: center;
-pointer-events: auto;
-z-index: 3;
-}
-.mobile-btn {
-width: 74px; height: 74px; border-radius: 50%;
-background: rgba(255, 255, 255, 0.25); border: 2px solid rgba(255, 255, 255, 0.5);
-color: #fff; font-size: 12px; font-weight: bold;
-display: flex; align-items: center; justify-content: center;
-box-sizing: border-box; text-align: center; line-height: 1.1;
-}
-.mobile-btn.active { background: rgba(255, 255, 255, 0.55); }
-#cam-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(255, 215, 100, 0.3); border-color: rgba(255, 215, 100, 0.6); }
-#use-btn { width: 60px; height: 60px; font-size: 11px; background: rgba(120, 235, 150, 0.3); border-color: rgba(120, 235, 150, 0.65); }
+  /* ---------- Lobby layout (Mobile Legends / CODM style) ----------
+     The 3D character is drawn on #lobby-canvas (script/lobby.js) behind this
+     layer. Logo top-left, round gear (SETTINGS) top-right, PLAY buttons on
+     the right side. */
+  #view-menu { position: absolute; inset: 0; }
 
-#rotate-overlay {
-position: fixed; inset: 0; z-index: 300;
-background: #10141a; color: #fff;
-display: none; flex-direction: column;
-align-items: center; justify-content: center;
-gap: 16px; text-align: center; padding: 24px;
-font-size: 15px; letter-spacing: 0.02em;
-}
-#rotate-overlay .icon { font-size: 48px; line-height: 1; animation: rotateHint 2.2s ease-in-out infinite; }
-@keyframes rotateHint {
-0%, 35%   { transform: rotate(0deg); }
-65%, 100% { transform: rotate(90deg); }
-}
-@media (orientation: portrait) and (pointer: coarse) {
-#rotate-overlay { display: flex; }
-}
+  .logo {
+    position: absolute;
+    top: max(12px, env(safe-area-inset-top));
+    left: max(16px, env(safe-area-inset-left));
+    pointer-events: none;
+  }
+  .logo .title {
+    text-align: left;
+    font-size: clamp(18px, min(3.4vw, 6.5vh), 32px);
+    text-shadow:
+      2px 0 0 #000, -2px 0 0 #000, 0 2px 0 #000, 0 -2px 0 #000,
+      2px 2px 0 #000, -2px 2px 0 #000, 2px -2px 0 #000, -2px -2px 0 #000,
+      0 4px 0 #000;
+    animation: none;
+  }
+  .logo .subtitle { margin: 6px 0 0; font-size: 10px; }
+
+  .lobby-actions {
+    position: absolute;
+    top: 50%;
+    right: max(5vw, env(safe-area-inset-right));
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 18px;
+  }
+  .lobby-actions .hint {
+    color: #fff; opacity: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  }
+
+  .gear-btn {
+    position: absolute;
+    top: max(12px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    width: 46px; height: 46px; box-sizing: border-box; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 3px solid #000; border-radius: 50%;
+    background: #ff9f1c;
+    cursor: pointer;
+    box-shadow:
+      0 4px 0 #000,
+      inset 0 -4px 0 rgba(0, 0, 0, 0.2),
+      inset 0 3px 0 rgba(255, 255, 255, 0.45);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .gear-btn svg {
+    width: 28px; height: 28px; display: block; pointer-events: none;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @media (hover: hover) {
+    .gear-btn:hover { transform: translateY(-2px); }
+    .gear-btn:hover svg { transform: rotate(-15deg); }
+  }
+  .gear-btn:active {
+    transform: translateY(3px);
+    box-shadow:
+      0 1px 0 #000,
+      inset 0 -3px 0 rgba(0, 0, 0, 0.2),
+      inset 0 3px 0 rgba(255, 255, 255, 0.45);
+  }
+
+  /* ---------- Title ---------- */
+  .title {
+    margin: 0; text-align: center; line-height: 1.02;
+    font-size: clamp(26px, min(8vw, 14vh), 58px);
+    font-weight: 900; letter-spacing: 0.05em; color: #fff;
+    text-shadow:
+      3px 0 0 #000, -3px 0 0 #000, 0 3px 0 #000, 0 -3px 0 #000,
+      3px 3px 0 #000, -3px 3px 0 #000, 3px -3px 0 #000, -3px -3px 0 #000,
+      0 6px 0 #000;
+    animation: titleBob 2.6s ease-in-out infinite;
+  }
+  .title span { display: block; }
+  .title span + span { color: #ffd23f; }
+  @keyframes titleBob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+  }
+  @media (prefers-reduced-motion: reduce) { .title { animation: none; } }
+
+  .subtitle {
+    margin: -4px 0 4px;
+    font-size: 13px; font-weight: 800; letter-spacing: 0.08em;
+    color: #1d3b53; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+  .hint {
+    margin: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
+    color: #1d3b53; opacity: 0.8;
+  }
+  @media (pointer: coarse) { .hint { display: none; } }
+
+  /* ---------- Toon buttons (same look as the in-game gear menu) ---------- */
+  .menu-btn {
+    width: 240px; max-width: calc(100vw - 48px); box-sizing: border-box;
+    padding: 12px 16px 14px;
+    border: 3px solid #000; border-radius: 16px;
+    color: #fff; font-family: inherit; font-size: 20px; font-weight: 900; letter-spacing: 0.08em;
+    text-shadow:
+      1.5px 0 0 #000, -1.5px 0 0 #000, 0 1.5px 0 #000, 0 -1.5px 0 #000,
+      1.5px 1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px -1.5px 0 #000,
+      0 3px 0 #000;
+    cursor: pointer;
+    box-shadow:
+      0 5px 0 #000,
+      inset 0 -5px 0 rgba(0, 0, 0, 0.2),
+      inset 0 4px 0 rgba(255, 255, 255, 0.4);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  @media (hover: hover) {
+    .menu-btn:hover { transform: translateY(-2px) scale(1.02); }
+  }
+  .menu-btn:active {
+    transform: translateY(4px);
+    box-shadow:
+      0 1px 0 #000,
+      inset 0 -3px 0 rgba(0, 0, 0, 0.2),
+      inset 0 4px 0 rgba(255, 255, 255, 0.4);
+  }
+  #btn-play { background: #3fbf4f; }
+  #btn-bot { background: #ffb21f; }
+  /* #btn-settings is the round gear button (.gear-btn), styled in the lobby block. */
+  .menu-btn:focus-visible, .back-btn:focus-visible, #retry-btn:focus-visible, .gear-btn:focus-visible {
+    outline: 3px dashed #fff; outline-offset: 3px;
+  }
+
+  /* ---------- Controls card ---------- */
+  .card {
+    width: 320px; max-width: 100%; max-height: 100%;
+    box-sizing: border-box; gap: 0; align-items: stretch;
+    background: #fff3c4;
+    border: 3px solid #000; border-radius: 16px;
+    box-shadow: 4px 5px 0 #000;
+    overflow: hidden;
+  }
+  .card-head {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; background: #ff9f1c; border-bottom: 3px solid #000;
+  }
+  .head-spacer { width: 26px; height: 26px; }
+  .card-title {
+    margin: 0; font-size: 15px; font-weight: 900; letter-spacing: 0.06em; color: #fff;
+    text-shadow:
+      1.5px 0 0 #000, -1.5px 0 0 #000, 0 1.5px 0 #000, 0 -1.5px 0 #000,
+      1.5px 1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px -1.5px 0 #000,
+      0 3px 0 #000;
+  }
+  .back-btn {
+    width: 26px; height: 26px; box-sizing: border-box; padding: 0;
+    border: 2px solid #000; border-radius: 50%;
+    background: #fff; color: #000;
+    font-family: inherit; font-size: 14px; font-weight: 900; line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 0 #000, inset 0 2px 0 rgba(255, 255, 255, 0.35);
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .back-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #000; }
+
+  .card-body {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 10px; overflow-y: auto;
+    overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+    color: #000;
+  }
+  .section {
+    align-self: flex-start;
+    padding: 2px 9px;
+    background: #000; color: #fff3c4; border-radius: 999px;
+    font-size: 10px; font-weight: 900; letter-spacing: 0.08em;
+  }
+  .keys { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .keys li {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 6px 9px; background: #fff;
+    border: 2px solid #000; border-radius: 10px; box-shadow: 0 2px 0 #000;
+    font-size: 12px; line-height: 1.2;
+  }
+  .keys b { font-weight: 900; white-space: nowrap; }
+  .keys span { text-align: right; font-weight: 700; color: #7a6320; }
+
+  /* ---------- Short landscape phones ---------- */
+  @media (max-height: 480px) {
+    .menu-view { gap: 10px; }
+    .lobby-actions { gap: 12px; }
+    .gear-btn { width: 40px; height: 40px; }
+    .gear-btn svg { width: 24px; height: 24px; }
+    .menu-btn { width: 210px; padding: 8px 14px 10px; font-size: 16px; }
+    .subtitle { font-size: 11px; }
+    .card { width: 290px; }
+  }
 </style>
-
-<base target="_blank">
 </head>
 <body>
 
-<canvas id="app-canvas"></canvas>
+<main id="main-menu" data-view="menu" aria-hidden="true">
+  <div class="menu-view" id="view-menu">
+    <div class="logo">
+      <h1 class="title"><span>3D CHARACTER</span><span>CONTROLLER</span></h1>
+      <p class="subtitle">ROBLOX-STYLE MOVEMENT &middot; THREE.JS</p>
+    </div>
 
-<div id="hud">
-  <div>WASD / Arrows: Move &nbsp;|&nbsp; Shift: Run &nbsp;|&nbsp; Space: Jump</div>
-  <div><span class="hint">Mouse</span> / <span class="hint">right-screen touch</span>: Look &amp; aim (3rd-person only)</div>
-  <div><span class="hint">E</span>: Pick up / Drop &nbsp;|&nbsp; <span class="hint">C</span>/<span class="hint">V</span>: Toggle camera mode</div>
-  <div><span class="hint">Bird view</span>: fixed overhead camera — joystick moves the player only</div>
-  <div id="camera-readout">camera: third-person</div>
-  <div id="state-readout">state: idle</div>
-</div>
+    <button type="button" class="gear-btn" id="btn-settings" aria-label="Settings" title="Settings"></button>
+
+    <div class="lobby-actions">
+      <button type="button" class="menu-btn" id="btn-play">PLAY</button>
+      <button type="button" class="menu-btn" id="btn-bot">PLAY WITH BOT</button>
+      <p class="hint">Press Enter to play</p>
+    </div>
+  </div>
+
+  <div class="menu-view card" id="view-settings" role="dialog" aria-label="Settings">
+    <div class="card-head">
+      <button type="button" class="back-btn" id="btn-back" aria-label="Back to menu">&larr;</button>
+      <h2 class="card-title">SETTINGS</h2>
+      <span class="head-spacer"></span>
+    </div>
+    <div class="card-body">
+      <div class="section">KEYBOARD &amp; MOUSE</div>
+      <ul class="keys">
+        <li><b>W A S D / Arrows</b><span>Move</span></li>
+        <li><b>Shift</b><span>Run</span></li>
+        <li><b>Space</b><span>Jump</span></li>
+        <li><b>Mouse</b><span>Look around</span></li>
+        <li><b>E</b><span>Pick up / Drop</span></li>
+        <li><b>C / V</b><span>Switch camera</span></li>
+      </ul>
+      <div class="section">TOUCH</div>
+      <ul class="keys">
+        <li><b>Left joystick</b><span>Move (push to the edge to run)</span></li>
+        <li><b>Right side swipe</b><span>Look around</span></li>
+        <li><b>JUMP / USE</b><span>Jump, pick up</span></li>
+        <li><b>Gear &rarr; Bird View</b><span>Switch camera</span></li>
+      </ul>
+    </div>
+  </div>
+</main>
 
 <div id="loading-screen">
-  <h2>Loading Character...</h2>
-  <p>Fetching idle.fbx, run.fbx, jump.fbx, back.fbx and pickUp.fbx from ./character/</p>
-  <div id="loading-bar-track"><div id="loading-bar-fill"></div></div>
-  <div id="loading-error"></div>
+  <canvas id="loading-scene"></canvas>
+  <div id="loading-panel">
+    <div id="loading-bar-track">
+      <div id="loading-bar-fill"></div>
+    </div>
+    <div id="loading-bar-info">
+      <span id="loading-percent">0%</span>
+      <span class="load-title">LOADING.....</span>
+    </div>
+    <div id="loading-error"></div>
+    <button type="button" id="retry-btn" hidden>RETRY</button>
+  </div>
 </div>
+
+<div id="black-transition"></div>
 
 <div id="rotate-overlay">
   <div class="icon">📱</div>
-  <div>Rotate your device to landscape</div>
+  <div class="title" id="rotate-title">Rotate your device</div>
+  <div class="text" id="rotate-text">This game plays only in FULLSCREEN LANDSCAPE. Touch the screen and it rotates automatically.</div>
 </div>
 
-<div id="mobile-controls">
-  <div id="camera-zone"></div>
-  <div id="joystick-zone">
-    <div id="joystick-base"></div>
-    <div id="joystick-stick"></div>
-  </div>
-  <div id="action-zone">
-    <div id="cam-btn" class="mobile-btn">CAM</div>
-    <div id="use-btn" class="mobile-btn">USE</div>
-    <div id="jump-btn" class="mobile-btn">JUMP</div>
-  </div>
-</div>
-
+<!-- three.js, used by script/lobby.js to draw the 3D character in the lobby
+     (same version and CDN as game.html). -->
 <script type="importmap">
 {
   "imports": {
@@ -172,3021 +479,946 @@ font-size: 15px; letter-spacing: 0.02em;
   }
 }
 </script>
-
 <script type="module">
-import * as THREE from 'three';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
-
+import {
+  CHARACTER_PATHS, isMobileDevice, setupMobileFullscreen, setupStartGate,
+  requestFullscreenLandscape,
+} from './script/common.js';
 /* =====================================================================
-   CONFIG
+   LOADING SCREEN — BIRD-VIEW 3D CHASE
    ---------------------------------------------------------------------
-   ROBLOX-STYLE / CODM-mobile / ROS-desktop feel.
+   Matches the in-game bird-view reference screenshot: the ACTUAL 3D
+   character model (same FBX, toon shading, black outline and colours as
+   the game) running on a green field, seen from a fixed overhead bird
+   camera, while the bot chases the player.
 
-   KEY MODEL (Roblox rules — CONFIG.movement.robloxStyle = true):
-     - Camera yaw/pitch is user-controlled (mouse / right-screen touch).
-     - MOVEMENT is camera-relative.
-     - The character ALWAYS turns to face the direction it is moving.
-       Pressing S spins the character 180° and it runs toward the camera
-       (no back-pedal clip, no strafing, no strafe speed penalty).
-     - While idle the character keeps its last facing (Roblox default).
-       Set CONFIG.movement.faceCameraWhenIdle = true to restore the old
-       "snap to camera yaw while standing still" behaviour.
+   run.fbx is loaded in parallel with the normal preload; the browser
+   caches the file, so the game itself reuses it instantly afterwards.
 
-   BIRD VIEW (CONFIG.birdView):
-     - FIXED overhead follow camera. The joystick controls ONLY the
-       player's movement — there is no camera orbit or tilt.
-     - The look zone (mouse / right-side touch drag) is a no-op in bird
-       view so the player is free to use the joystick for movement.
+   Everything is best-effort: if WebGL / three.js / the FBX fails, the
+   loading screen still shows (the flat green backdrop + loading panel).
    ===================================================================== */
-const CONFIG = {
-  ui: {
-    alwaysShowMobileControls: true,
-    toggleKey: 'KeyM',
+async function initLoadingScene() {
+  var canvas = document.getElementById('loading-scene');
+  var screen = document.getElementById('loading-screen');
+  if (!canvas || !screen) return;
 
-    /* Sprint hysteresis — enter sprint high, exit lower so walk/run
-       never flickers at the threshold. */
-    joystickRunThreshold: 0.85,   // enter sprint
-    joystickRunExit:      0.70,   // exit sprint
-    joystickDeadzone:     0.15,
-  },
-
-  look: {
-    /* Desktop mouse uses movementX / movementY — immediate, 1:1,
-       no smoothing. */
-    mouseSensitivity: 0.0025,
-    /* Mobile right-side drag. */
-    touchSensitivity: 0.0035,
-    minPitch: -0.35,
-    maxPitch:  1.15,
-    startPitch: 0.20,
-    startYaw:   0.0,
-    /* Camera position track — snappy, no floaty drag. */
-    followLerp: 30,
-    minCameraY: 0.30,
-  },
-
-  paths: {
-    idle:   './character/idle.fbx',
-    run:    './character/run.fbx',
-    jump:   './character/jump.fbx',
-    pickup: './character/pickUp.fbx',
-    back:   './character/back.fbx',
-  },
-
-  clipNameOverride: { idle: null, run: null, jump: null, pickup: null, back: null },
-
-  toon: {
-    enabled: true,
-    gradientSteps: 3,
-    outlineEnabled: true,
-    outlineThickness: 0.012,
-    outlineColor: 0x000000,
-  },
-
-  character: {
-    autoScale: true,
-    targetHeight: 1.8,
-    manualScale: 0.01,
-    forceDoubleSide: false,
-
-    colors: {
-      enabled: true,
-      replaceTextures: false,
-      hair:     0x2b1d16,
-      body:     0xe8b48c,
-      shirt:    0x3a7bd5,
-      shorts:   0x2f3542,
-      slippers: 0xd94f4f,
-    },
-
-    colorParts: [
-      { key: 'slippers', words: ['slipper', 'slip', 'shoe', 'sandal', 'boot'] },
-      { key: 'shorts',   words: ['short', 'pant', 'trouser', 'jean'] },
-      { key: 'shirt',    words: ['shirt', 'tshirt', 'top', 'jacket', 'hoodie'] },
-      { key: 'hair',     words: ['hair', 'beard', 'brow'] },
-      { key: 'body',     words: ['body', 'skin', 'head', 'arm', 'leg', 'hand', 'face'] },
-    ],
-  },
-
-  movement: {
-    walkSpeed: 3.8,
-    runMultiplier: 2.2,
-    /* Player turns toward target at this rate (rad/s). */
-    rotationSpeed: 16,
-
-    /* Strafing only slightly slower than forward. (Ignored in
-       robloxStyle mode.) */
-    lateralSpeedMultiplier: 0.90,
-    lateralRotationMultiplier: 1.0,
-
-    /* Exponential accel/decel: snappy start, quick controlled stop. */
-    acceleration: 25,
-    deceleration: 30,
-
-    gravity: -20,
-    jumpSpeed: 7.5,
-    groundY: 0,
-    backwardSpeedMultiplier: 0.85,
-    backwardDotThreshold:   -0.5,
-
-    /* -----------------------------------------------------------------
-       ROBLOX-STYLE CHARACTER MOTION
-       true  = the character ALWAYS turns to face the direction it is
-               moving. No strafing, no back-pedal: pressing S spins the
-               character 180° and it runs at the camera. back.fbx is
-               loaded but never played.
-       false = the older ROS/CODM hybrid (strafe + backward-walk clip).
-       ----------------------------------------------------------------- */
-    robloxStyle: true,
-
-    /* Roblox keeps the character's facing when you stop moving.
-       Set true to restore the old "snap to camera yaw while idle". */
-    faceCameraWhenIdle: false,
-  },
-
-  camera: {
-    distanceBase: 3.8,
-    distanceHeightFactor: 2.0,
-    lookHeightFactor: 0.62,
-    birdHeightFactor: 4.5,
-    birdDistanceFactor: 3.2,
-
-    collisionEnabled: true,
-    collisionPadding: 0.25,
-    collisionMinDistance: 0.40,
-
-    /* Roblox "classic" camera: while the character is moving, the camera
-       slowly swings around behind it. Off by default because it fights
-       manual mouse / right-screen look. Turn on for old-school feel. */
-    autoAlign: false,
-    autoAlignStrength: 3.0,
-  },
-
-  /* -------------------------------------------------------------------
-     BIRD VIEW — FIXED overhead follow camera.
-
-     The camera does NOT respond to any user input. It simply follows
-     the player's position from above, and the joystick continues to
-     move the player exactly like it does in third-person mode.
-     ------------------------------------------------------------------- */
-  birdView: {
-    /* Fixed downward tilt of the overhead camera (radians).
-       0    = level with the player
-       π/2  = straight down
-       1.15 rad ≈ 66° gives a classic 3/4 overhead view with a bit of
-       depth, so the player can still see the ground. */
-    pitch: 1.15,
-
-    /* Distance = characterHeight × distanceScale. */
-    distanceScale: 5.5,
-
-    /* Positional follow smoothing (larger = snappier). */
-    followLerp: 8,
-  },
-
-  /* -------------------------------------------------------------------
-     NPC — a single AI companion that idles / wanders the field, and
-     sprints to the player the moment the player picks something up.
-     It also performs a fully PROCEDURAL "reach out the hand" gesture
-     when it gets close to the player (no extra animation file needed).
-     ------------------------------------------------------------------- */
-  npc: {
-    enabled: true,
-    spawnPos: { x: 6, z: -4 },
-    wanderRadius: 11,
-    idleMin: 1.2, idleMax: 3.2,
-    walkMin: 2.5, walkMax: 5.5,
-    /* Maximum time the NPC will keep chasing before giving up.
-       Bump this if the player is very fast — the NPC no longer stops
-       on its own; it only stops when the hand physically tags the
-       player (see handContactDistance) or when this timer expires. */
-    chaseDuration: 20.0,
-
-    /* Procedural hand-reach gesture (driven by the built-in CCD IK). */
-    reachDistance: 2.4,
-    reachFadeIn: 0.35,
-    reachFadeOut: 0.60,
-    reachTargetHeightFactor: 0.62,  // fraction of character height (chest)
-
-    /* Distance (metres) at which the reaching hand is considered to
-       have "touched" the player. Kept very tight so the chase only
-       ends when the hand is literally on the player's body. */
-    handContactDistance: 0.15,
-
-    /* Fallback "body tag" distance (metres) between the NPC root and
-       the player root. If the hand IK can't quite reach (or lags
-       behind), the NPC is considered to have tagged the player once
-       it has physically closed to this body-to-body distance. This
-       guarantees the chase always terminates on contact. */
-    bodyContactDistance: 0.80,
-
-    /* -----------------------------------------------------------------
-       NATURAL PURSUIT — makes the chase feel like a real runner
-       tracking a target, not a scripted AI mirroring the player.
-
-       reactionTime:
-         Seconds of perceptual lag. The NPC does NOT see the player's
-         current position; it sees a low-pass-filtered version of it.
-         Sudden direction changes (jukes) therefore take this long to
-         register — the NPC can be "tricked" by a fast cut.
-
-       predictionTime:
-         Seconds of lead. The NPC aims at where it THINKS the player
-         will be (delayed position + delayed velocity × lead), instead
-         of chasing the exact past footsteps.
-
-       maxPredictionDistance:
-         Hard cap on the lead offset so a very fast player cannot send
-         the NPC wildly off-course when it reads a bad velocity spike.
-       ----------------------------------------------------------------- */
-    reactionTime: 0.45,
-    predictionTime: 0.55,
-    maxPredictionDistance: 3.5,
-
-    /* -----------------------------------------------------------------
-       CARTOON "!" DETECTION MARKER
-       A red, toon-shaded exclamation mark pops above the NPC's head the
-       moment the NPC detects the player picking up the object, then
-       fades out shortly after — mimicking a manga / cartoon "spotted
-       you!" reaction. It always billboards toward the camera so it
-       reads clearly from any viewing angle.
-       ----------------------------------------------------------------- */
-    exclaimColor: 0xff2b2b,
-    /* Height of the marker above the NPC's feet, as a multiple of the
-       character height. 1.05 tucks the "!" right above the head —
-       the group origin sits just past the top of the model so the
-       dot of the "!" lands a hair above the hair/head geometry. */
-    exclaimHeightFactor: 1.05,
-    /* Overall world-space size of the marker (metres). Bumped ~30%
-       from 0.35 so the "!" reads clearly at gameplay distance. */
-    exclaimSize: 0.455,
-    /* How long the pop stays on screen, in seconds. */
-    exclaimDuration: 0.75,
-  },
-
-  animation: {
-    idleRunFade: 0.30,
-    backFade:    0.25,
-    jumpFadeIn:  0.10, jumpFadeOut: 0.25,
-    pickupFadeIn: 0.18, pickupFadeOut: 0.30,
-    useWarping: true,
-  },
-
-  pickup: {
-    enabled: true,
-    reachDistance: 1.75,
-    promptOffsetY: 0.42,
-    alignSpeed: 3.0,
-    alignTurnSpeed: 9.0,
-    alignTimeout: 1.6,
-    positionTolerance: 0.06,
-    angleTolerance: 0.16,
-    defaultReach: 0.45,
-    ikFadeIn: 0.30, ikFadeOut: 0.35,
-    ikIterations: 8, ikMaxStep: 0.30,
-    gripFraction: 2.1,
-    minGripDistance: 0.06,
-    fingerSearchDepth: 5,
-    fallbackGripOffset: 0.10,
-
-    holdOffset: { x: 0.080, y: -0.005, z: 0.035 },
-    holdRotation: { x: 87, y: 12, z: 180 },
-
-    handBoneTiers: [
-      ['righthand', 'handright', 'wrighthand', 'rhand', 'handr',
-       'bip01rhand', 'biprhand', 'handr02', 'handr2'],
-      ['hand', 'hand02', 'hand2'],
-    ],
-    chainStopPattern: /(spine|chest|hips|hip|root|neck|head|pelvis|clavicle|shoulder)/,
-  },
-
-  debug: { showHelpers: false, showGripPoint: false },
-};
-
-/* =====================================================================
-   ROOT-MOTION STRIPPER
-   ===================================================================== */
-const ROOT_BONE_RE = /(root|hips|pelvis|bip01)/;
-
-function stripHorizontalRootMotion(clip) {
-  if (!clip || !clip.tracks) return;
-  for (const track of clip.tracks) {
-    const dot = track.name.lastIndexOf('.');
-    if (dot < 0) continue;
-    if (track.name.slice(dot + 1) !== 'position') continue;
-
-    const boneName = track.name.slice(0, dot)
-      .toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!ROOT_BONE_RE.test(boneName)) continue;
-
-    const v = track.values;
-    if (!v || v.length < 6) continue;
-    const x0 = v[0];
-    const z0 = v[2];
-    for (let i = 0; i < v.length; i += 3) {
-      v[i]     = x0;
-      v[i + 2] = z0;
-    }
+  var THREE, FBXLoader, skeletonClone = null;
+  try {
+    THREE = await import('three');
+    var mod = await import('three/addons/loaders/FBXLoader.js');
+    FBXLoader = mod.FBXLoader;
+  } catch (err) {
+    console.warn('Loading scene: three.js unavailable.', err);
+    return;
   }
-}
+  try {
+    var skelMod = await import('three/addons/utils/SkeletonUtils.js');
+    skeletonClone = skelMod.clone;
+  } catch (err) { /* fall back to plain clone */ }
 
-/* =====================================================================
-   RENDERER / SCENE / LIGHTS
-   ===================================================================== */
-const canvas = document.getElementById('app-canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+  var renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  } catch (err) {
+    console.warn('Loading scene: WebGL unavailable.', err);
+    return;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 60, 180);
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x5f9f50);
+  scene.fog = new THREE.Fog(0x5f9f50, 40, 90);
 
-const camera = new THREE.PerspectiveCamera(
-  60, window.innerWidth / window.innerHeight, 0.1, 2000
-);
-camera.position.set(0, 3, 6);
-camera.lookAt(0, 1, 0);
+  var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
-scene.add(ambientLight);
+  /* Same light rig as the game. */
+  scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+  scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x4a6b3a, 0.85));
+  var sun = new THREE.DirectionalLight(0xffffff, 2.0);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 40;
+  sun.shadow.camera.left = -12;
+  sun.shadow.camera.right = 12;
+  sun.shadow.camera.top = 12;
+  sun.shadow.camera.bottom = -12;
+  scene.add(sun);
+  scene.add(sun.target);
 
-const hemiLight = new THREE.HemisphereLight(0xbfd9ff, 0x4a6b3a, 0.85);
-hemiLight.position.set(0, 20, 0);
-scene.add(hemiLight);
+  /* Green ground (toon, same colour as game.html). */
+  var ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshToonMaterial({ color: 0x5f9f50 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
-dirLight.position.set(8, 15, 8);
-dirLight.castShadow = true;
-dirLight.shadow.mapSize.set(2048, 2048);
-dirLight.shadow.camera.near = 1;
-dirLight.shadow.camera.far = 80;
-dirLight.shadow.camera.left = -25;
-dirLight.shadow.camera.right = 25;
-dirLight.shadow.camera.top = 25;
-dirLight.shadow.camera.bottom = -25;
-scene.add(dirLight);
+  /* ---- Toon helpers (match lobby.js / game.html) ------------------ */
+  function makeToonGradientMap(steps) {
+    var n = Math.max(2, Math.floor(steps));
+    var data = new Uint8Array(n);
+    for (var i = 0; i < n; i++) data[i] = Math.round((i / (n - 1)) * 255);
+    var tex = new THREE.DataTexture(data, n, 1, THREE.RedFormat);
+    tex.minFilter = THREE.NearestFilter;
+    tex.magFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.needsUpdate = true;
+    return tex;
+  }
+  var GRADIENT = makeToonGradientMap(3);
 
-/* =====================================================================
-   GLOBAL TOON GRAPHICS SYSTEM
-   ===================================================================== */
-scene.userData.__isScene = true;
-
-function makeToonGradientMap(steps) {
-  const n = Math.max(2, Math.floor(steps));
-  const data = new Uint8Array(n);
-  for (let i = 0; i < n; i++) data[i] = Math.round((i / (n - 1)) * 255);
-  const tex = new THREE.DataTexture(data, n, 1, THREE.RedFormat);
-  tex.minFilter = THREE.NearestFilter;
-  tex.magFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false;
-  tex.needsUpdate = true;
-  return tex;
-}
-const TOON_GRADIENT = makeToonGradientMap(CONFIG.toon.gradientSteps);
-
-function makeToonMaterial(opts = {}) {
-  if (!CONFIG.toon.enabled) {
-    return new THREE.MeshStandardMaterial({
-      color: opts.color !== undefined ? opts.color : 0xffffff,
-      map: opts.map || null,
-      roughness: 0.85, metalness: 0.0,
-      side: opts.side !== undefined ? opts.side : THREE.FrontSide,
-      transparent: !!opts.transparent,
-      opacity: opts.opacity !== undefined ? opts.opacity : 1,
+  function createOutlineMaterial(thickness) {
+    var mat = new THREE.MeshBasicMaterial({
+      color: 0x000000, side: THREE.BackSide, toneMapped: false,
     });
-  }
-  const mat = new THREE.MeshToonMaterial({
-    color: opts.color !== undefined ? opts.color : 0xffffff,
-    gradientMap: TOON_GRADIENT,
-    side: opts.side !== undefined ? opts.side : THREE.FrontSide,
-    transparent: !!opts.transparent,
-    opacity: opts.opacity !== undefined ? opts.opacity : 1,
-    fog: true,
-  });
-  if (opts.map) mat.map = opts.map;
-  return mat;
-}
-
-function createOutlineMaterial(thickness) {
-  const mat = new THREE.MeshBasicMaterial({
-    color: CONFIG.toon.outlineColor,
-    side: THREE.BackSide,
-    fog: true,
-    toneMapped: false,
-  });
-
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uOutlineThickness = { value: thickness };
-
-    shader.vertexShader =
-      'uniform float uOutlineThickness;\n' + shader.vertexShader;
-
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <skinning_vertex>',
-      [
+    mat.onBeforeCompile = function (shader) {
+      shader.uniforms.uOutlineThickness = { value: thickness };
+      shader.vertexShader = 'uniform float uOutlineThickness;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace(
         '#include <skinning_vertex>',
-        '#ifdef USE_SKINNING',
-        '  transformed += normalize( objectNormal ) * uOutlineThickness;',
-        '#else',
-        '  transformed += normalize( normal ) * uOutlineThickness;',
-        '#endif',
-      ].join('\n')
-    );
-  };
-
-  mat.customProgramCacheKey = () => 'global-toon-outline-v2';
-  return mat;
-}
-
-function addOutline(mesh, worldThickness) {
-  if (!mesh || (!mesh.isMesh && !mesh.isSkinnedMesh)) return null;
-  if (mesh.userData.__hasOutline) return null;
-  if (!mesh.parent) return null;
-  if (mesh.userData.__skipOutline) return null;
-
-  const ws = new THREE.Vector3();
-  mesh.getWorldScale(ws);
-  const avgScale = (Math.abs(ws.x) + Math.abs(ws.y) + Math.abs(ws.z)) / 3 || 1;
-  const localThickness = worldThickness / avgScale;
-
-  const outline = mesh.clone(false);
-  outline.material = createOutlineMaterial(localThickness);
-  outline.name = (mesh.name || 'mesh') + '_outline';
-  outline.castShadow = false;
-  outline.receiveShadow = false;
-  outline.frustumCulled = false;
-  outline.userData.__isOutline = true;
-
-  mesh.parent.add(outline);
-  mesh.userData.__hasOutline = true;
-  return outline;
-}
-
-function applyToonGraphics(root) {
-  if (!CONFIG.toon.enabled || !root) return;
-  if (root.userData.__isOutline) return;
-  if (root.userData.__skipToon) return;
-
-  const meshes = [];
-  root.traverse((o) => {
-    if ((o.isMesh || o.isSkinnedMesh) &&
-        !o.userData.__isOutline &&
-        !o.userData.__skipToon) {
-      meshes.push(o);
-    }
-  });
-  if (meshes.length === 0) return;
-
-  for (const mesh of meshes) {
-    if (mesh.userData.__toonified) continue;
-    const isArray = Array.isArray(mesh.material);
-    const mats = isArray ? mesh.material : [mesh.material];
-
-    const newMats = mats.map((mat) => {
-      if (!mat) return mat;
-      if (mat.isMeshToonMaterial) return mat;
-      const colorHex = mat.color ? mat.color.getHex() : 0xffffff;
-      return makeToonMaterial({
-        color: colorHex,
-        map: mat.map || null,
-        side: mat.side !== undefined ? mat.side : THREE.FrontSide,
-        transparent: !!mat.transparent,
-        opacity: mat.opacity !== undefined ? mat.opacity : 1,
-      });
-    });
-
-    mesh.material = isArray ? newMats : newMats[0];
-    mesh.userData.__toonified = true;
+        [
+          '#include <skinning_vertex>',
+          '#ifdef USE_SKINNING',
+          '  transformed += normalize( objectNormal ) * uOutlineThickness;',
+          '#else',
+          '  transformed += normalize( normal ) * uOutlineThickness;',
+          '#endif',
+        ].join('\n')
+      );
+    };
+    mat.customProgramCacheKey = function () { return 'loading-toon-outline'; };
+    return mat;
   }
 
-  if (CONFIG.toon.outlineEnabled) {
-    for (const mesh of meshes) addOutline(mesh, CONFIG.toon.outlineThickness);
+  function normalizePartName(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   }
-}
-
-const _originalObjectAdd = THREE.Object3D.prototype.add;
-THREE.Object3D.prototype.add = function (...objects) {
-  const result = _originalObjectAdd.apply(this, objects);
-
-  let p = this;
-  while (p && !p.userData.__isScene) p = p.parent;
-  if (p) {
-    for (const obj of objects) {
-      if (obj && obj.isObject3D) applyToonGraphics(obj);
-    }
-  }
-  return result;
-};
-
-/* ---- Ground --------------------------------------------------------- */
-const groundGeo = new THREE.PlaneGeometry(400, 400);
-const groundMat = makeToonMaterial({ color: 0x6fae5e });
-const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.userData.__skipOutline = true;
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = CONFIG.movement.groundY;
-ground.receiveShadow = true;
-scene.add(ground);
-
-if (CONFIG.debug.showHelpers) {
-  const axesHelper = new THREE.AxesHelper(2);
-  axesHelper.position.set(0, 0.02, 0);
-  axesHelper.userData.__skipToon = true;
-  scene.add(axesHelper);
-}
-
-/* Camera-collidable props (ground is intentionally excluded). */
-const cameraCollidables = [];
-
-const markerGeo = new THREE.ConeGeometry(0.25, 0.9, 8);
-const markerMat = new THREE.MeshStandardMaterial({ color: 0xff5555 });
-const markerPositions = [
-  [5, 5], [-5, 5], [5, -5], [-5, -5],
-  [10, 0], [-10, 0], [0, 10], [0, -10],
-];
-for (const [x, z] of markerPositions) {
-  const marker = new THREE.Mesh(markerGeo, markerMat.clone());
-  marker.position.set(x, 0.45, z);
-  marker.castShadow = true;
-  scene.add(marker);
-  cameraCollidables.push(marker);
-}
-
-/* =====================================================================
-   CSS2D label renderer (floating "E" prompts)
-   ===================================================================== */
-const labelRenderer = new CSS2DRenderer();
-labelRenderer.setSize(window.innerWidth, window.innerHeight);
-labelRenderer.domElement.style.position = 'absolute';
-labelRenderer.domElement.style.top = '0px';
-labelRenderer.domElement.style.left = '0px';
-labelRenderer.domElement.style.pointerEvents = 'none';
-labelRenderer.domElement.style.zIndex = '15';
-document.body.appendChild(labelRenderer.domElement);
-
-function onViewportResize() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(w, h);
-  labelRenderer.setSize(w, h);
-}
-window.addEventListener('resize', onViewportResize);
-window.addEventListener('orientationchange', () => {
-  setTimeout(onViewportResize, 60);
-  setTimeout(onViewportResize, 350);
-});
-
-/* =====================================================================
-   BOUNDS HELPER
-   ===================================================================== */
-function computeBounds(root) {
-  root.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(root);
-  const invalid =
-    box.isEmpty() ||
-    !isFinite(box.min.x) || !isFinite(box.min.y) || !isFinite(box.min.z) ||
-    !isFinite(box.max.x) || !isFinite(box.max.y) || !isFinite(box.max.z);
-  if (invalid) {
-    box.makeEmpty();
-    root.traverse((obj) => {
-      if (obj.isMesh && obj.geometry) {
-        if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
-        if (obj.geometry.boundingBox) {
-          box.union(obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld));
-        }
-      }
-    });
-  }
-  return box;
-}
-function logVec(label, v) {
-  console.log(`${label}: x=${v.x.toFixed(4)}, y=${v.y.toFixed(4)}, z=${v.z.toFixed(4)}`);
-}
-
-/* =====================================================================
-   INPUT MANAGER
-   ===================================================================== */
-const InputState = {
-  moveX: 0, moveZ: 0, run: false,
-  jumpPressed: false, toggleCamera: false, interactPressed: false,
-};
-const keys = {};
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') e.preventDefault();
-  keys[e.code] = true;
-});
-window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-
-function readKeyboardInto(input) {
-  let x = 0, z = 0;
-  if (keys['KeyW'] || keys['ArrowUp']) z += 1;
-  if (keys['KeyS'] || keys['ArrowDown']) z -= 1;
-  if (keys['KeyA'] || keys['ArrowLeft']) x -= 1;
-  if (keys['KeyD'] || keys['ArrowRight']) x += 1;
-
-  if (!Joystick.active) {
-    input.moveX = x;
-    input.moveZ = z;
-    input.run = !!keys['ShiftLeft'] || !!keys['ShiftRight'];
-  }
-
-  if (keys['Space'] && !input._spaceHeldLastFrame) input.jumpPressed = true;
-  input._spaceHeldLastFrame = !!keys['Space'];
-
-  if (keys['KeyE'] && !input._eHeldLastFrame) input.interactPressed = true;
-  input._eHeldLastFrame = !!keys['KeyE'];
-
-  const camHeld = !!(keys['KeyC'] || keys['KeyV']);
-  if (camHeld && !input._camHeldLastFrame) input.toggleCamera = true;
-  input._camHeldLastFrame = camHeld;
-}
-
-/* =====================================================================
-   MOBILE CONTROLS
-   ===================================================================== */
-const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-
-const mobileControlsEl = document.getElementById('mobile-controls');
-const showTouchControls = () => { mobileControlsEl.style.display = 'block'; };
-const hideTouchControls = () => {
-  mobileControlsEl.style.display = 'none';
-  joystickEnd();
-  InputState.run = false;
-};
-if (CONFIG.ui.alwaysShowMobileControls || isTouchDevice) showTouchControls();
-
-window.addEventListener('keydown', (e) => {
-  if (e.code !== CONFIG.ui.toggleKey) return;
-  if (mobileControlsEl.style.display === 'none') showTouchControls();
-  else hideTouchControls();
-});
-
-/* =====================================================================
-   MOBILE FULLSCREEN + LANDSCAPE LOCK  (automatic, no dedicated tap)
-   ---------------------------------------------------------------------
-   Browsers require a user gesture for Fullscreen + Orientation Lock.
-   To make this feel automatic:
-     1. We attempt it IMMEDIATELY on load (works if the page was opened
-        from a user gesture — e.g. tapping a link).
-     2. We listen to EVERY user-interaction event (touch, pointer, mouse,
-        key, wheel, scroll, focus, visibilitychange) and re-attempt on
-        each one until it succeeds. The first gesture the user makes —
-        whatever it is — will trigger it.
-     3. A slow interval retry (every 400ms) handles the case where the
-        browser becomes "ready" a moment after load.
-   ===================================================================== */
-const isMobileDevice =
-  isTouchDevice || /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent);
-
-let fullscreenKicked = false;
-
-async function enterFullscreenLandscape() {
-  if (fullscreenKicked) return;
-
-  let gotFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-
-  /* ---- Fullscreen ------------------------------------------------ */
-  try {
-    if (!gotFs) {
-      const el = document.documentElement;
-      const req =
-        el.requestFullscreen ||
-        el.webkitRequestFullscreen ||
-        el.webkitRequestFullScreen ||
-        el.msRequestFullscreen;
-      if (req) {
-        const p = req.call(el, { navigationUI: 'hide' });
-        if (p && typeof p.then === 'function') {
-          await p.then(() => { gotFs = true; }).catch(() => {});
-        } else {
-          gotFs = true;  // synchronous legacy API
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Fullscreen request was blocked:', err);
-  }
-
-  /* ---- Orientation lock ------------------------------------------ */
-  let gotLock = false;
-  try {
-    const so = screen.orientation;
-    if (so && typeof so.lock === 'function') {
-      await so.lock('landscape')
-        .then(() => { gotLock = true; })
-        .catch(() => {});
-    } else if (typeof screen.lockOrientation === 'function') {
-      gotLock = screen.lockOrientation('landscape');
-    } else if (typeof screen.mozLockOrientation === 'function') {
-      gotLock = screen.mozLockOrientation('landscape');
-    } else if (typeof screen.msLockOrientation === 'function') {
-      gotLock = screen.msLockOrientation('landscape');
-    } else {
-      // No orientation-lock API on this browser — nothing more we can do.
-      gotLock = true;
-    }
-  } catch (err) {
-    console.warn('Orientation lock not available:', err);
-  }
-
-  /* Consider ourselves done once either succeeded (or nothing more we
-     can do). Otherwise keep retrying on the next user gesture. */
-  if (gotFs || gotLock) fullscreenKicked = true;
-
-  onViewportResize();
-}
-
-if (isMobileDevice) {
-  /* 1. Immediate attempt — works if launched from a user gesture. */
-  enterFullscreenLandscape();
-
-  /* 2. Retry on the FIRST interaction of any kind. Every event is
-        passive + capture-phase so it can never block the app. */
-  const kick = () => { if (!fullscreenKicked) enterFullscreenLandscape(); };
-  const KICK_EVENTS = [
-    'touchstart', 'touchend', 'touchmove',
-    'pointerdown', 'pointerup', 'pointermove',
-    'mousedown', 'mouseup', 'click',
-    'keydown', 'keyup',
-    'wheel', 'scroll',
-    'focus', 'visibilitychange',
+  var COLOR_PARTS = [
+    { key: 'slippers', words: ['slipper', 'slip', 'shoe', 'sandal', 'boot'] },
+    { key: 'shorts',   words: ['short', 'pant', 'trouser', 'jean'] },
+    { key: 'shirt',    words: ['shirt', 'tshirt', 'top', 'jacket', 'hoodie'] },
+    { key: 'hair',     words: ['hair', 'beard', 'brow'] },
+    { key: 'body',     words: ['body', 'skin', 'head', 'arm', 'leg', 'hand', 'face'] },
   ];
-  for (const evt of KICK_EVENTS) {
-    window.addEventListener(evt, kick, { passive: true, capture: true });
-    document.addEventListener(evt, kick, { passive: true, capture: true });
+  function detectPart(mesh, material) {
+    var cands = [
+      normalizePartName(mesh.name),
+      normalizePartName(material && material.name),
+      normalizePartName(mesh.parent && mesh.parent.name),
+    ].filter(Boolean);
+    for (var i = 0; i < COLOR_PARTS.length; i++) {
+      for (var j = 0; j < COLOR_PARTS[i].words.length; j++) {
+        var w = COLOR_PARTS[i].words[j];
+        for (var k = 0; k < cands.length; k++) {
+          if (cands[k].indexOf(w) >= 0) return COLOR_PARTS[i].key;
+        }
+      }
+    }
+    return null;
+  }
+  function applyColors(model, colors) {
+    model.traverse(function (obj) {
+      if (!obj.isMesh && !obj.isSkinnedMesh) return;
+      obj.visible = true;
+      obj.castShadow = true;
+      obj.receiveShadow = false;
+      obj.frustumCulled = false;
+      var isArray = Array.isArray(obj.material);
+      var mats = isArray ? obj.material : [obj.material];
+      var out = mats.map(function (mat) {
+        if (!mat) return mat;
+        var part = detectPart(obj, mat);
+        var hex = part ? colors[part] : (mat.color ? mat.color.getHex() : 0xffffff);
+        var toon = new THREE.MeshToonMaterial({
+          color: hex, gradientMap: GRADIENT, side: THREE.FrontSide,
+        });
+        if (mat.map) toon.map = mat.map;
+        return toon;
+      });
+      obj.material = isArray ? out : out[0];
+    });
+  }
+  function addOutlines(model, thickness) {
+    var meshes = [];
+    model.traverse(function (o) {
+      if ((o.isMesh || o.isSkinnedMesh) && !o.userData.__isOutline) meshes.push(o);
+    });
+    for (var i = 0; i < meshes.length; i++) {
+      var mesh = meshes[i];
+      if (!mesh.parent) continue;
+      var ws = new THREE.Vector3();
+      mesh.getWorldScale(ws);
+      var avg = (Math.abs(ws.x) + Math.abs(ws.y) + Math.abs(ws.z)) / 3 || 1;
+      var outline = mesh.clone(false);
+      outline.material = createOutlineMaterial(thickness / avg);
+      outline.name = (mesh.name || 'mesh') + '_outline';
+      outline.castShadow = false;
+      outline.receiveShadow = false;
+      outline.frustumCulled = false;
+      outline.userData.__isOutline = true;
+      mesh.parent.add(outline);
+    }
+  }
+  function computeBounds(root) {
+    root.updateMatrixWorld(true);
+    var box = new THREE.Box3().setFromObject(root);
+    if (box.isEmpty() ||
+        ![box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z].every(isFinite)) {
+      box.makeEmpty();
+      root.traverse(function (obj) {
+        if (obj.isMesh && obj.geometry) {
+          if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+          if (obj.geometry.boundingBox) {
+            box.union(obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld));
+          }
+        }
+      });
+    }
+    return box;
+  }
+  function normalizeModel(model, targetHeight) {
+    model.position.set(0, 0, 0);
+    model.rotation.set(0, 0, 0);
+    model.scale.set(1, 1, 1);
+    model.updateMatrixWorld(true);
+    var rawSize = computeBounds(model).getSize(new THREE.Vector3());
+    var scale = 0.01;
+    if (isFinite(rawSize.y) && rawSize.y > 1e-6) {
+      scale = THREE.MathUtils.clamp(targetHeight / rawSize.y, 1e-6, 1e6);
+    }
+    model.scale.setScalar(scale);
+    model.updateMatrixWorld(true);
+    var box = computeBounds(model);
+    var center = box.getCenter(new THREE.Vector3());
+    model.position.set(-center.x, -box.min.y, -center.z);
+    model.updateMatrixWorld(true);
+    return Math.max(computeBounds(model).getSize(new THREE.Vector3()).y, 0.0001);
   }
 
-  /* 3. Slow retry loop — covers browsers that need a moment. */
-  let tries = 0;
-  const retryId = setInterval(() => {
-    if (fullscreenKicked || ++tries > 40) { clearInterval(retryId); return; }
-    enterFullscreenLandscape();
-  }, 400);
-
-  /* Re-arm the kick whenever we lose fullscreen. */
-  const onFsChange = () => {
-    const fs = document.fullscreenElement || document.webkitFullscreenElement;
-    if (!fs) fullscreenKicked = false;
-    setTimeout(onViewportResize, 60);
-  };
-  document.addEventListener('fullscreenchange', onFsChange);
-  document.addEventListener('webkitfullscreenchange', onFsChange);
-  document.addEventListener('mozfullscreenchange', onFsChange);
-  document.addEventListener('MSFullscreenChange', onFsChange);
-}
-
-/* =====================================================================
-   JOYSTICK  (movement only — LEFT side of screen)
-   Includes sprint hysteresis so walk/run never flickers.
-   ===================================================================== */
-const Joystick = { active: false, originX: 0, originY: 0, maxRadius: 45 };
-
-const joystickZone = document.getElementById('joystick-zone');
-const joystickStick = document.getElementById('joystick-stick');
-const jumpBtn = document.getElementById('jump-btn');
-const camBtn  = document.getElementById('cam-btn');
-const useBtn  = document.getElementById('use-btn');
-
-let joystickTouchId = null;
-let _sprintLatched = false;
-
-function joystickStart(clientX, clientY) {
-  const rect = joystickZone.getBoundingClientRect();
-  Joystick.originX = rect.left + rect.width / 2;
-  Joystick.originY = rect.top + rect.height / 2;
-  Joystick.active = true;
-  joystickMove(clientX, clientY);
-}
-function joystickMove(clientX, clientY) {
-  const dx = clientX - Joystick.originX;
-  const dy = clientY - Joystick.originY;
-  const dist = Math.min(Math.sqrt(dx * dx + dy * dy), Joystick.maxRadius);
-  const angle = Math.atan2(dy, dx);
-  const clampedX = Math.cos(angle) * dist;
-  const clampedY = Math.sin(angle) * dist;
-  joystickStick.style.transform = `translate(${clampedX}px, ${clampedY}px)`;
-
-  const normalized = dist / Joystick.maxRadius;
-  const dz = CONFIG.ui.joystickDeadzone;
-
-  if (normalized <= dz) {
-    InputState.moveX = 0;
-    InputState.moveZ = 0;
-    InputState.run = false;
-    _sprintLatched = false;
-    joystickStick.classList.remove('running');
+  /* ---- Load run.fbx in parallel with the preload ------------------- */
+  var fbx;
+  try {
+    fbx = await new Promise(function (resolve, reject) {
+      new FBXLoader().load(
+        './character/run.fbx',
+        resolve,
+        undefined,
+        function (err) { reject(err || new Error('run.fbx failed')); }
+      );
+    });
+  } catch (err) {
+    console.warn('Loading scene: could not load run.fbx.', err);
     return;
   }
 
-  const mag = Math.min(1, (normalized - dz) / (1 - dz));
-  InputState.moveX = Math.cos(angle) * mag;
-  InputState.moveZ = -Math.sin(angle) * mag;
+  /* If boot() already finished by now, no point building the scene. */
+  if (!screen || screen.style.display === 'none') return;
 
-  if (!_sprintLatched && mag >= CONFIG.ui.joystickRunThreshold) _sprintLatched = true;
-  else if (_sprintLatched && mag < CONFIG.ui.joystickRunExit) _sprintLatched = false;
+  var runClip = (fbx.animations && fbx.animations.length > 0) ? fbx.animations[0] : null;
 
-  InputState.run = _sprintLatched;
-  joystickStick.classList.toggle('running', _sprintLatched);
-}
-function joystickEnd() {
-  Joystick.active = false;
-  joystickTouchId = null;
-  joystickStick.style.transform = `translate(0px, 0px)`;
-  joystickStick.classList.remove('running');
-  _sprintLatched = false;
-  InputState.moveX = 0;
-  InputState.moveZ = 0;
-  InputState.run = false;
-}
+  var PLAYER_COLORS = {
+    hair: 0x2b1d16, body: 0xe8b48c, shirt: 0x3a7bd5,
+    shorts: 0x2f3542, slippers: 0xd94f4f,
+  };
+  var BOT_COLORS = {
+    hair: 0x1a1410, body: 0xe8b48c, shirt: 0x27ae60,
+    shorts: 0x6a4c93, slippers: 0xf39c12,
+  };
 
-joystickZone.addEventListener('touchstart', (e) => {
-  const t = e.changedTouches[0];
-  joystickTouchId = t.identifier;
-  joystickStart(t.clientX, t.clientY);
-  e.preventDefault();
-}, { passive: false });
-joystickZone.addEventListener('touchmove', (e) => {
-  for (const t of e.changedTouches) if (t.identifier === joystickTouchId) joystickMove(t.clientX, t.clientY);
-  e.preventDefault();
-}, { passive: false });
-joystickZone.addEventListener('touchend', (e) => {
-  for (const t of e.changedTouches) if (t.identifier === joystickTouchId) joystickEnd();
-}, { passive: false });
-joystickZone.addEventListener('touchcancel', joystickEnd);
+  function makeActor(colors) {
+    var model = skeletonClone ? skeletonClone(fbx) : fbx.clone(true);
+    applyColors(model, colors);
+    var h = normalizeModel(model, 1.8);
+    addOutlines(model, 0.012);
+    var pivot = new THREE.Group();
+    pivot.add(model);
+    scene.add(pivot);
+    return { pivot: pivot, model: model, height: h };
+  }
 
-/* Mouse fallback so the joystick is testable on desktop. */
-let mouseJoystickDown = false;
-joystickZone.addEventListener('mousedown', (e) => {
-  mouseJoystickDown = true;
-  joystickStart(e.clientX, e.clientY);
-  e.preventDefault();
-  e.stopPropagation();
-});
-window.addEventListener('mousemove', (e) => { if (mouseJoystickDown) joystickMove(e.clientX, e.clientY); });
-window.addEventListener('mouseup', () => { if (mouseJoystickDown) { mouseJoystickDown = false; joystickEnd(); } });
+  /* ---- Loading-scene reach IK (bot catches the player) ------------- */
+  function normalizeBoneName(name) {
+    return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  function handSide(n) {
+    if (/left/.test(n))  return 'left';
+    if (/right/.test(n)) return 'right';
+    if (/handl$/.test(n) || /lhand$/.test(n)) return 'left';
+    if (/handr$/.test(n) || /rhand$/.test(n)) return 'right';
+    return 'unknown';
+  }
+  function findHandBone(root) {
+    var bones = [];
+    root.traverse(function (o) { if (o.isBone) bones.push(o); });
+    var tiers = [
+      ['righthand', 'handright', 'wrighthand', 'rhand', 'handr',
+       'bip01rhand', 'biprhand', 'handr02', 'handr2'],
+      ['hand', 'hand02', 'hand2']
+    ];
+    var NOT_A_HAND_RE = /thumb|index|middle|ring|pinky|finger|forearm|lowerarm|upperarm|shoulder|clavicle/i;
+    var best = null, bestScore = -Infinity;
+    for (var b = 0; b < bones.length; b++) {
+      var bone = bones[b];
+      var n = normalizeBoneName(bone.name);
+      var score = 0;
+      for (var t = 0; t < tiers.length; t++) {
+        for (var i = 0; i < tiers[t].length; i++) {
+          if (n.indexOf(tiers[t][i]) >= 0) {
+            score = Math.max(score, (tiers.length - t) * 100 + (tiers[t].length - i) * 10);
+            break;
+          }
+        }
+      }
+      if (score <= 0) continue;
+      var side = handSide(n);
+      if (side === 'right') score += 1000;
+      if (side === 'left')  score -= 1000;
+      if (NOT_A_HAND_RE.test(n)) score -= 300;
+      if (score > bestScore) { bestScore = score; best = bone; }
+    }
+    return best;
+  }
+  function buildArmChain(handBone) {
+    var chain = [];
+    var b = handBone.parent;
+    var stop = /(spine|chest|hips|hip|root|neck|head|pelvis|clavicle|shoulder)/;
+    while (b && b.isBone && chain.length < 3) {
+      var n = normalizeBoneName(b.name);
+      if (stop.test(n)) break;
+      chain.push(b);
+      b = b.parent;
+    }
+    return chain;
+  }
+  function createReachIK(effector, bones) {
+    var iterations = 8;
+    var maxStep = 0.3;
+    var _identity = new THREE.Quaternion();
+    var _e = new THREE.Vector3(), _p = new THREE.Vector3();
+    var _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
+    var _goal = new THREE.Vector3(), _q = new THREE.Quaternion();
+    var _pq = new THREE.Quaternion(), _ipq = new THREE.Quaternion();
+    var _delta = new THREE.Quaternion();
+    var ik = {
+      effector: effector,
+      bones: bones,
+      weight: 0,
+      target: new THREE.Vector3(),
+      update: function () {
+        if (this.weight <= 0.001 || this.bones.length === 0) return;
+        this.effector.getWorldPosition(_e);
+        _goal.copy(_e).lerp(this.target, this.weight);
+        for (var it = 0; it < iterations; it++) {
+          for (var i = 0; i < this.bones.length; i++) {
+            var bone = this.bones[i];
+            if (!bone.parent) continue;
+            bone.getWorldPosition(_p);
+            this.effector.getWorldPosition(_e);
+            _v1.subVectors(_e, _p);
+            _v2.subVectors(_goal, _p);
+            if (_v1.lengthSq() < 1e-10 || _v2.lengthSq() < 1e-10) continue;
+            _v1.normalize();
+            _v2.normalize();
+            _q.setFromUnitVectors(_v1, _v2);
+            var angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(_q.w), -1, 1));
+            if (angle > maxStep && angle > 1e-5) _q.slerp(_identity, 1 - maxStep / angle);
+            bone.parent.getWorldQuaternion(_pq);
+            _ipq.copy(_pq).invert();
+            _delta.copy(_ipq).multiply(_q).multiply(_pq);
+            bone.quaternion.premultiply(_delta);
+            bone.quaternion.normalize();
+          }
+        }
+      }
+    };
+    return ik;
+  }
 
-/* =====================================================================
-   CAMERA LOOK  —  RIGHT half of screen (mobile) / mouse (desktop)
-   ---------------------------------------------------------------------
-   Only active in third-person mode. In bird-view mode the look zone is
-   a no-op — the joystick is free to move the player.
-   ===================================================================== */
-const cameraZone = document.getElementById('camera-zone');
+  var player = makeActor(PLAYER_COLORS);
+  var bot    = makeActor(BOT_COLORS);
 
-let lookTouchId = null;
-let lookLastX = 0, lookLastY = 0;
-
-cameraZone.addEventListener('touchstart', (e) => {
-  if (lookTouchId !== null) return;       // one look finger at a time
-  const t = e.changedTouches[0];
-  lookTouchId = t.identifier;
-  lookLastX = t.clientX;
-  lookLastY = t.clientY;
-  e.preventDefault();
-  e.stopPropagation();
-}, { passive: false });
-
-cameraZone.addEventListener('touchmove', (e) => {
-  if (lookTouchId === null) return;
-  for (const t of e.changedTouches) {
-    if (t.identifier !== lookTouchId) continue;
-    const dx = t.clientX - lookLastX;
-    const dy = t.clientY - lookLastY;
-    lookLastX = t.clientX;
-    lookLastY = t.clientY;
-    if (cameraController) {
-      cameraController.rotate(
-        dx * CONFIG.look.touchSensitivity,
-        dy * CONFIG.look.touchSensitivity
-      );
+  var botReach = null;
+  var botHandBone = findHandBone(bot.model);
+  if (botHandBone) {
+    var botArmChain = buildArmChain(botHandBone);
+    if (botArmChain.length > 0) {
+      botReach = createReachIK(botHandBone, botArmChain);
+      console.log('LOADING SCENE: bot reach rigged on ' + botArmChain.length + ' bone(s).');
     }
   }
-  e.preventDefault();
-}, { passive: false });
 
-function endLookTouch(e) {
-  for (const t of e.changedTouches) {
-    if (t.identifier === lookTouchId) lookTouchId = null;
+  var playerMixer = null, botMixer = null;
+  if (runClip) {
+    playerMixer = new THREE.AnimationMixer(player.model);
+    botMixer    = new THREE.AnimationMixer(bot.model);
+    playerMixer.clipAction(runClip).play();
+    /* The bot runs a hair faster so its cycle is visibly ahead — makes
+       the chase read as "catching up" rather than two clones mirroring. */
+    var botAction = botMixer.clipAction(runClip);
+    botAction.setEffectiveTimeScale(1.15);
+    botAction.play();
   }
-}
-cameraZone.addEventListener('touchend', endLookTouch, { passive: false });
-cameraZone.addEventListener('touchcancel', endLookTouch, { passive: false });
 
-/* ---------------------------------------------------------------------
-   DESKTOP MOUSE — automatic pointer capture
-   ---------------------------------------------------------------------
-   Rotation uses movementX / movementY so it works IMMEDIATELY with no
-   click. Pointer Lock is requested automatically (on load, on first user
-   gesture, and re-acquired after any loss) for cursor hiding.
-   Clicking is never required to look around.
-   ------------------------------------------------------------------- */
-function isUIElement(el) {
-  if (!el || !el.closest) return false;
-  return !!(el.closest('.mobile-btn') || el.closest('#joystick-zone'));
-}
+  /* ---- Fixed bird-view camera (matches CONFIG.birdView) ----------- */
+  var BIRD_PITCH = 0.80;
+  var charHeight = player.height;
+  var birdDistance = charHeight * 5.0;
 
-function tryLockPointer() {
-  if (document.pointerLockElement || document.webkitPointerLockElement) return;
-  const el = renderer.domElement;
-  const req = el.requestPointerLock || el.webkitRequestPointerLock;
-  if (req) {
-    try { req.call(el); } catch (err) { /* ignore */ }
+  var runSpeed = 5.0;
+  /* Start the chase symmetric around the world origin so the initial
+     camera view is perfectly centred between the two characters.
+     Bring them closer together (distance 1.2 < reachDistance 2.4)
+     so the visual reads as the bot reaching out to catch the player. */
+  var playerX = -0.6;
+  var botX = 0.6;
+
+  function layout() {
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
   }
-}
-
-/* Attempt an immediate lock (may be blocked until user gesture). */
-tryLockPointer();
-
-/* Retry on the first user interaction of any kind — one time only. */
-['click', 'mousedown', 'keydown', 'touchstart'].forEach((evt) => {
-  window.addEventListener(evt, tryLockPointer, { once: true, passive: true });
-});
-
-/* Re-lock after loss (Esc, tab change, etc.) on the next user gesture. */
-document.addEventListener('pointerlockchange', () => {
-  const locked = document.pointerLockElement || document.webkitPointerLockElement;
-  if (!locked) {
-    window.addEventListener('mousedown', tryLockPointer, { once: true });
-    window.addEventListener('keydown', tryLockPointer, { once: true });
-  }
-});
-
-/* Mouse movement rotates the camera — immediate, 1:1, no smoothing.
-   Works WITH or WITHOUT pointer lock (movementX/movementY are always
-   available on the mousemove event). Ignored in bird-view mode. */
-window.addEventListener('mousemove', (e) => {
-  if (!cameraController) return;
-  if (isUIElement(e.target)) return;           // don't rotate over buttons
-  const dx = e.movementX || 0;
-  const dy = e.movementY || 0;
-  if (dx === 0 && dy === 0) return;
-  cameraController.rotate(
-    dx * CONFIG.look.mouseSensitivity,
-    dy * CONFIG.look.mouseSensitivity
-  );
-});
-
-/* --- Action buttons --- */
-function bindHoldButton(el, onDown, onUp) {
-  el.addEventListener('touchstart', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
-  el.addEventListener('touchend',   (e) => { onUp();   el.classList.remove('active'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
-  el.addEventListener('touchcancel',(e) => { onUp();   el.classList.remove('active'); e.preventDefault(); e.stopPropagation(); }, { passive: false });
-
-  el.addEventListener('mousedown', (e) => { onDown(); el.classList.add('active'); e.preventDefault(); e.stopPropagation(); });
-  window.addEventListener('mouseup', () => {
-    if (el.classList.contains('active')) { onUp(); el.classList.remove('active'); }
+  layout();
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', function () {
+    setTimeout(layout, 60);
+    setTimeout(layout, 350);
   });
-}
-bindHoldButton(jumpBtn, () => { InputState.jumpPressed = true; }, () => {});
-bindHoldButton(camBtn,  () => { InputState.toggleCamera = true; },() => {});
-bindHoldButton(useBtn,  () => { InputState.interactPressed = true; },() => {});
 
-/* =====================================================================
-   PICKUP ITEMS
-   ===================================================================== */
-const PICKUP_SPOTS = [
-  { pos: new THREE.Vector3( 2.6, 0,  2.2), color: 0xffcc33 },
-  { pos: new THREE.Vector3(-3.4, 0,  1.0), color: 0x5fd0ff },
-  { pos: new THREE.Vector3( 1.0, 0, -4.2), color: 0xff8ad6 },
-];
+  var clock = new THREE.Clock();
+  var mid = new THREE.Vector3(0, 0, 0);
+  var _reachTarget = new THREE.Vector3();
+  var stopped = false;
 
-let pickedCount = 0;
-
-class PickupItem {
-  constructor(position, color) {
-    this.taken = false;
-    this.held = false;
-    this.frozen = false;
-    this.velocity = new THREE.Vector3();
-    this.angularVelocity = new THREE.Vector3();
-    this.resting = true;
-
-    const geo = new THREE.BoxGeometry(0.30, 0.06, 0.15);
-    const mat = new THREE.MeshStandardMaterial({
-      color, roughness: 0.8, metalness: 0.05,
-    });
-
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.castShadow = true;
-
-    geo.computeBoundingBox();
-    const bboxSize = geo.boundingBox.getSize(new THREE.Vector3());
-    this._halfExtents = new THREE.Vector3(bboxSize.x / 2, bboxSize.y / 2, bboxSize.z / 2);
-    this.halfHeight = this._halfExtents.y;
-    this.mesh.rotation.y = Math.random() * Math.PI;
-
-    this.group = new THREE.Group();
-    this.group.position.set(position.x, this.halfHeight, position.z);
-    this.group.add(this.mesh);
-
-    const wrap = document.createElement('div');
-    wrap.className = 'pickup-prompt-wrap';
-    const inner = document.createElement('div');
-    inner.className = 'pickup-prompt hidden';
-    inner.innerHTML = '<span class="key">E</span><span class="txt">Pick up</span>';
-    wrap.appendChild(inner);
-    this.promptEl = inner;
-
-    this.prompt = new CSS2DObject(wrap);
-    this.prompt.position.set(0, this.halfHeight + CONFIG.pickup.promptOffsetY, 0);
-    this.group.add(this.prompt);
-
-    scene.add(this.group);
-  }
-
-  _groundClearance() {
-    const q = this.group.quaternion;
-    const e = this._halfExtents;
-    let minY = Infinity;
-    for (let i = 0; i < 8; i++) {
-      _corner.set(
-        (i & 1 ? 1 : -1) * e.x,
-        (i & 2 ? 1 : -1) * e.y,
-        (i & 4 ? 1 : -1) * e.z
-      ).applyQuaternion(q);
-      if (_corner.y < minY) minY = _corner.y;
+  function frame() {
+    if (stopped) return;
+    requestAnimationFrame(frame);
+    if (!screen || screen.style.display === 'none' || screen.style.opacity === '0') {
+      stopped = true;
+      return;
     }
-    return -minY;
-  }
 
-  update(delta) {
-    if (this.taken || this.held || this.resting) return;
-    this.velocity.y += CONFIG.movement.gravity * delta;
-    this.group.position.addScaledVector(this.velocity, delta);
-    this.group.rotation.x += this.angularVelocity.x * delta;
-    this.group.rotation.y += this.angularVelocity.y * delta;
-    this.group.rotation.z += this.angularVelocity.z * delta;
+    var dt = Math.min(clock.getDelta(), 0.05);
 
-    const clearance = this._groundClearance();
-    if (this.group.position.y > clearance) return;
-    this.group.position.y = clearance;
+    /* Characters run IN PLACE at fixed, centred positions. The run
+       animation still plays (mixer.update below), but the models
+       stay put so the chase reads as an endless sprint on a
+       treadmill while the loading bar fills. */
+    var px = playerX;
+    var pz = 0;
+    var bx = botX;
+    var bz = 0;
 
-    if (Math.abs(this.velocity.y) > 1.2) {
-      this.velocity.y *= -0.32;
-      this.velocity.x *= 0.55; this.velocity.z *= 0.55;
-      this.angularVelocity.multiplyScalar(0.55);
-      this.group.rotation.x *= 0.5; this.group.rotation.z *= 0.5;
-    } else {
-      this.velocity.set(0, 0, 0);
-      this.angularVelocity.set(0, 0, 0);
-      this.group.rotation.set(0, this.group.rotation.y, 0);
-      this.group.position.y = this.halfHeight;
-      this.resting = true;
+    player.pivot.position.set(px, 0, pz);
+    bot.pivot.position.set(bx, 0, bz);
+
+    /* Both face the SAME direction (-X world, which appears as RIGHT on
+       screen in the bird-view camera). The bot is on the LEFT of the
+       screen, the player is on the RIGHT, and the bot reaches forward
+       to catch the player. */
+    player.pivot.rotation.y = -Math.PI / 2;
+    bot.pivot.rotation.y = -Math.PI / 2;
+
+    if (playerMixer) playerMixer.update(dt);
+    if (botMixer)    botMixer.update(dt);
+
+    player.pivot.updateMatrixWorld(true);
+    bot.pivot.updateMatrixWorld(true);
+
+    /* Bot's catching hand reaches for the player's chest, like the NPC's
+       procedural hand-reach while chasing. */
+    if (botReach) {
+      _reachTarget.set(0, player.height * 0.62, 0);
+      player.pivot.localToWorld(_reachTarget);
+      botReach.target.copy(_reachTarget);
+      botReach.weight += (1 - botReach.weight) * (1 - Math.exp(-6 * dt));
+      botReach.update();
+      bot.pivot.updateMatrixWorld(true);
     }
-  }
 
-  toss(dirX, dirZ, upSpeed = 3.2, spin = 1) {
-    this.resting = false;
-    this.velocity.set(dirX, upSpeed, dirZ);
-    this.angularVelocity.set(
-      (Math.random() - 0.5) * 7 * spin,
-      (Math.random() - 0.5) * 5 * spin,
-      (Math.random() - 0.5) * 7 * spin
+    /* Fixed overhead camera, softly following the chase midpoint. */
+    var tmx = (px + bx) * 0.5;
+    var tmz = (pz + bz) * 0.5;
+    mid.x += (tmx - mid.x) * (1 - Math.exp(-6 * dt));
+    mid.z += (tmz - mid.z) * (1 - Math.exp(-6 * dt));
+
+    var lookY = charHeight * 0.62;
+    var cosP = Math.cos(BIRD_PITCH);
+    var sinP = Math.sin(BIRD_PITCH);
+    camera.position.set(
+      mid.x,
+      lookY + birdDistance * sinP,
+      mid.z - birdDistance * cosP
     );
+    camera.lookAt(mid.x, lookY, mid.z);
+
+    sun.position.set(mid.x + 8, 15, mid.z + 5);
+    sun.target.position.set(mid.x, 0, mid.z);
+    sun.target.updateMatrixWorld();
+
+    renderer.render(scene, camera);
   }
 
-  setPromptVisible(v) { this.promptEl.classList.toggle('hidden', !v); }
+  requestAnimationFrame(frame);
 }
 
-class PickupManager {
-  constructor() { this.items = []; this.active = null; this.enabled = false; }
-  populate() {
-    for (const spot of PICKUP_SPOTS) this.items.push(new PickupItem(spot.pos, spot.color));
-    this.enabled = true;
-  }
-  update(delta, elapsed, player) {
-    if (!this.enabled) return;
-    for (const it of this.items) it.update(delta, elapsed);
-    if (!player || !player.canPickup()) { this.setActive(null); return; }
-
-    let best = null, bestD = Infinity;
-    const p = player.root.position;
-    const tmp = _v3a;
-    for (const it of this.items) {
-      if (it.taken || it.held) continue;
-      it.mesh.getWorldPosition(tmp);
-      const d = Math.hypot(tmp.x - p.x, tmp.z - p.z);
-      if (d < bestD) { bestD = d; best = it; }
-    }
-    this.setActive(bestD <= CONFIG.pickup.reachDistance ? best : null);
-  }
-  setActive(item) {
-    if (this.active === item) return;
-    if (this.active) { this.active.setPromptVisible(false); this.active.frozen = false; }
-    this.active = item;
-    if (item) { item.setPromptVisible(true); item.frozen = true; }
-  }
-}
-const pickupManager = new PickupManager();
-const _v3a = new THREE.Vector3();
-const _corner = new THREE.Vector3();
+/* Kick off the loading scene. Runs in the background: the loading
+   panel and its progress bar above it update regardless. */
+initLoadingScene();
 
 /* =====================================================================
-   CHARACTER LOADING
+   MAIN MENU + LOADING SCREEN
+   ---------------------------------------------------------------------
+   1. The loading screen downloads every FBX the game needs (the list is
+      shared with game.html through script/common.js). The browser keeps
+      them in its HTTP cache, so game.html starts much faster.
+   2. When everything is ready the main menu fades in.
+   3. PLAY opens game.html. Inside the game, the gear menu has a
+      MAIN MENU button that comes back here.
    ===================================================================== */
-const loadingScreen = document.getElementById('loading-screen');
+const GAME_URL = 'game.html';
+
+/* The game cannot start without these. pickUp / back / slipper are
+   optional: game.html falls back gracefully when they are missing. */
+const REQUIRED_ASSETS = ['idle', 'run', 'jump'];
+
+/* Keep the loading screen up at least this long so cached loads do not
+   flash it for a single frame. */
+const MIN_LOADING_MS = 5000;
+
+const loadingScreen  = document.getElementById('loading-screen');
 const loadingBarFill = document.getElementById('loading-bar-fill');
 const loadingErrorEl = document.getElementById('loading-error');
-const loader = new FBXLoader();
+const retryBtn       = document.getElementById('retry-btn');
+const loadingPercent = document.getElementById('loading-percent');
 
-function loadFBX(path, label, onProgressTotal) {
-  return new Promise((resolve, reject) => {
-    loader.load(
-      path,
-      (fbx) => resolve(fbx),
-      (xhr) => { if (xhr.total) onProgressTotal(label, xhr.loaded / xhr.total); },
-      (err) => reject(new Error(`Failed to load ${path}: ${err.message || err}`))
-    );
-  });
+/* ---- Smooth, appealing loading bar ---------------------------------
+   The bar has two values:
+     loadTarget - the REAL progress (0-100). Set by setLoadTarget().
+     loadShown  - the VISIBLE width (0-100), eased toward the target.
+   loadShown can never jump: it moves at most ~30%/s toward the target,
+   so even a fully cached load (assets arrive in the same frame) plays
+   as a smooth 0 -> 70% sweep instead of an instant jump to 80%.
+   The final 85 -> 100 stretch is driven by setLoadSchedule() over the
+   remaining MIN_LOADING_MS budget, so it always fills evenly. */
+let loadTarget = 0;
+let loadShown = 0;
+let loadSchedule = null;
+let loadRafId = 0;
+
+function loadPaint() {
+  loadingBarFill.style.width = loadShown.toFixed(1) + '%';
+  if (loadingPercent) loadingPercent.textContent = Math.round(loadShown) + '%';
 }
 
-const loadProgress = { idle: 0, run: 0, jump: 0, pickup: 0, back: 0 };
-function updateLoadingBar() {
-  const keysArr = Object.keys(loadProgress);
-  let sum = 0; for (const k of keysArr) sum += loadProgress[k];
-  loadingBarFill.style.width = `${Math.round((sum / keysArr.length) * 100)}%`;
+function loadStartLoop() {
+  if (loadRafId) return;
+  loadRafId = requestAnimationFrame(loadTick);
 }
 
-function pickClip(source, key) {
-  const override = CONFIG.clipNameOverride[key];
-  if (override) {
-    const found = source.animations.find((c) => c.name === override);
-    if (found) return found;
-    console.warn(`Clip "${override}" not found in ${key}.fbx, falling back to animations[0].`);
+function loadTick(now) {
+  loadRafId = 0;
+
+  if (loadSchedule) {
+    const t = Math.min(1, (now - loadSchedule.start) / loadSchedule.duration);
+    loadTarget = loadSchedule.from + (loadSchedule.to - loadSchedule.from) * t;
+    if (t >= 1) loadSchedule = null;
   }
-  if (!source.animations || source.animations.length === 0) throw new Error(`${key}.fbx has no animation clips.`);
-  return source.animations[0];
-}
 
-let characterRoot = null;
-let characterInfo = null;
-let player = null;
-let armIK = null;
-let npc = null;
-
-function normalizeCharacter(model) {
-  model.position.set(0, 0, 0);
-  model.rotation.set(0, 0, 0);
-  model.scale.set(1, 1, 1);
-  model.updateMatrixWorld(true);
-
-  const rawBox = computeBounds(model);
-  const rawSize = rawBox.getSize(new THREE.Vector3());
-  const rawCenter = rawBox.getCenter(new THREE.Vector3());
-
-  console.log('=== RAW FBX BOUNDS (before scaling) ===');
-  logVec('  raw size  ', rawSize);
-  logVec('  raw center', rawCenter);
-
-  let scale = CONFIG.character.manualScale;
-  if (CONFIG.character.autoScale) {
-    const rawHeight = rawSize.y;
-    if (isFinite(rawHeight) && rawHeight > 1e-6) {
-      scale = THREE.MathUtils.clamp(CONFIG.character.targetHeight / rawHeight, 1e-6, 1e6);
-      console.log(`AUTO-SCALE: raw height ${rawHeight.toFixed(4)} -> target ${CONFIG.character.targetHeight} => scale ${scale}`);
-    }
+  const diff = loadTarget - loadShown;
+  if (diff > 0.01) {
+    /* Max ~30%/s at 60fps (0.5 per frame). Slower easing as we get
+       close keeps the sweep smooth and never over-shoots the target. */
+    const maxStep = 0.5;
+    const step = Math.min(maxStep, Math.max(0.12, diff * 0.06));
+    loadShown = Math.min(loadTarget, loadShown + step);
+    loadPaint();
+  } else if (diff < -0.01) {
+    loadShown = loadTarget;
+    loadPaint();
   }
-  model.scale.setScalar(scale);
-  model.updateMatrixWorld(true);
 
-  const scaledBox = computeBounds(model);
-  const scaledSize = scaledBox.getSize(new THREE.Vector3());
-  const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-
-  console.log('=== SCALED FBX BOUNDS ===');
-  logVec('  scaled size  ', scaledSize);
-  logVec('  scaled center', scaledCenter);
-
-  model.position.set(-scaledCenter.x, -scaledBox.min.y, -scaledCenter.z);
-  model.updateMatrixWorld(true);
-
-  const finalBox = computeBounds(model);
-  const finalSize = finalBox.getSize(new THREE.Vector3());
-  const finalCenter = finalBox.getCenter(new THREE.Vector3());
-
-  console.log('=== FINAL (GROUNDED) BOUNDS ===');
-  logVec('  final size  ', finalSize);
-  logVec('  final center', finalCenter);
-  console.log(`  feet are at Y = ${finalBox.min.y.toFixed(4)} (should be 0.0000)`);
-
-  return { height: Math.max(finalSize.y, 0.0001), size: finalSize, center: finalCenter, scale, box: finalBox };
-}
-
-/* ---- CHARACTER COLOURS → TOON MATERIALS ---------------------------- */
-function normalizePartName(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-function detectCharacterPart(mesh, material) {
-  const candidates = [
-    normalizePartName(mesh.name),
-    normalizePartName(material && material.name),
-    normalizePartName(mesh.parent && mesh.parent.name),
-  ].filter(Boolean);
-  for (const part of CONFIG.character.colorParts) {
-    for (const word of part.words) {
-      if (candidates.some((n) => n.includes(word))) return part.key;
-    }
+  if (Math.abs(loadTarget - loadShown) > 0.05 || loadSchedule) {
+    loadRafId = requestAnimationFrame(loadTick);
   }
-  return null;
 }
-function applyCharacterColors(model) {
-  const cfg = CONFIG.character.colors;
 
-  const inventory = [];
-  model.traverse((obj) => {
-    if (!obj.isMesh && !obj.isSkinnedMesh) return;
-    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-    inventory.push(
-      `mesh "${obj.name}" [parent "${obj.parent ? obj.parent.name : '-'}"] ` +
-      `materials: ${mats.map((m) => (m ? `"${m.name}"` : 'null')).join(', ')}`
-    );
-  });
-  console.log('%cCHARACTER MESH / MATERIAL INVENTORY', 'color:#4caf50;font-weight:bold;');
-  for (const line of inventory) console.log('  ' + line);
+function setLoadTarget(pct) {
+  loadSchedule = null;
+  loadTarget = Math.max(loadTarget, Math.min(100, pct));
+  loadStartLoop();
+}
 
-  if (!cfg || !cfg.enabled) return;
-  if (!Array.isArray(CONFIG.character.colorParts)) return;
-
-  const partColor = {
-    hair: cfg.hair, body: cfg.body, shirt: cfg.shirt,
-    shorts: cfg.shorts, slippers: cfg.slippers,
+function setLoadSchedule(toPct, durationMs) {
+  const to = Math.min(100, toPct);
+  loadSchedule = {
+    from: loadShown,
+    to,
+    start: performance.now(),
+    duration: Math.max(1, durationMs),
   };
-  const counts = {};
-  const unmatched = [];
-
-  model.traverse((obj) => {
-    if (!obj.isMesh && !obj.isSkinnedMesh) return;
-    if (obj.userData.__isOutline) return;
-
-    const isArray = Array.isArray(obj.material);
-    const mats = isArray ? obj.material : [obj.material];
-
-    const newMats = mats.map((mat) => {
-      if (!mat) return mat;
-      const part = detectCharacterPart(obj, mat);
-      const hex = part ? partColor[part] : undefined;
-      if (!part) unmatched.push(obj.name || '(unnamed mesh)');
-
-      const sourceColor =
-        (hex !== null && hex !== undefined)
-          ? hex
-          : (mat.color ? mat.color.getHex() : 0xffffff);
-      const keptMap = cfg.replaceTextures ? null : (mat.map || null);
-
-      const m = makeToonMaterial({
-        color: sourceColor,
-        map: keptMap,
-        side: CONFIG.character.forceDoubleSide ? THREE.DoubleSide : THREE.FrontSide,
-      });
-      if (part) counts[part] = (counts[part] || 0) + 1;
-      return m;
-    });
-
-    obj.material = isArray ? newMats : newMats[0];
-    obj.userData.__toonified = true;
-  });
-
-  console.log('CHARACTER COLORS APPLIED (toon):', counts);
-  if (unmatched.length) {
-    console.warn(
-      'CHARACTER COLORS: could not classify these meshes ' +
-      '(add keywords to CONFIG.character.colorParts):',
-      [...new Set(unmatched)]
-    );
-  }
+  loadTarget = to;
+  loadStartLoop();
 }
 
-/* ---- BONE AUTO-DETECTION ---- */
-function normalizeBoneName(name) { return String(name).toLowerCase().replace(/[^a-z0-9]/g, ''); }
-function handSide(n) {
-  if (/left/.test(n))  return 'left';
-  if (/right/.test(n)) return 'right';
-  if (/handl$/.test(n) || /lhand$/.test(n)) return 'left';
-  if (/handr$/.test(n) || /rhand$/.test(n)) return 'right';
-  return 'unknown';
+function loadReset() {
+  if (loadRafId) { cancelAnimationFrame(loadRafId); loadRafId = 0; }
+  loadSchedule = null;
+  loadTarget = 0;
+  loadShown = 0;
+  loadPaint();
 }
-function findBone(root, tiers) {
-  const bones = [];
-  root.traverse((o) => { if (o.isBone) bones.push(o); });
-  const NOT_A_HAND_RE = /thumb|index|middle|ring|pinky|finger|forearm|lowerarm|upperarm|shoulder|clavicle/i;
-  let best = null, bestScore = -Infinity;
-  for (const bone of bones) {
-    const n = normalizeBoneName(bone.name);
-    let score = 0;
-    for (let t = 0; t < tiers.length; t++) {
-      const tier = tiers[t];
-      for (let i = 0; i < tier.length; i++) {
-        if (n.includes(tier[i])) {
-          score = Math.max(score, (tiers.length - t) * 100 + (tier.length - i) * 10);
-          break;
-        }
-      }
-    }
-    if (score <= 0) continue;
-    const side = handSide(n);
-    if (side === 'right') score += 1000;
-    if (side === 'left')  score -= 1000;
-    if (NOT_A_HAND_RE.test(n)) score -= 300;
-    if (score > bestScore) { bestScore = score; best = bone; }
-  }
-  if (best) {
-    const n = normalizeBoneName(best.name);
-    console.log(`PICKUP: hand bone -> "${best.name}" (normalized="${n}", side=${handSide(n)}, score=${bestScore})`);
-  } else {
-    console.warn('PICKUP: no hand bone matched — tune CONFIG.pickup.handBoneTiers.');
-  }
-  return best;
-}
-function buildArmChain(handBone) {
-  const chain = [];
-  let b = handBone.parent;
-  while (b && b.isBone && chain.length < 3) {
-    const n = normalizeBoneName(b.name);
-    if (CONFIG.pickup.chainStopPattern.test(n)) break;
-    chain.push(b);
-    b = b.parent;
-  }
-  return chain;
-}
-function findFingertips(handBone, maxDepth) {
-  const tips = [];
-  const queue = [{ bone: handBone, depth: 0 }];
-  while (queue.length) {
-    const { bone, depth } = queue.shift();
-    const boneChildren = bone.children.filter((c) => c.isBone);
-    if (depth > 0 && boneChildren.length === 0) { tips.push(bone); continue; }
-    if (depth >= maxDepth) continue;
-    for (const c of boneChildren) queue.push({ bone: c, depth: depth + 1 });
-  }
-  return tips;
-}
-function computeFingertipLocalOffset(handBone) {
-  handBone.updateWorldMatrix(true, true);
-  const wristWorld = new THREE.Vector3();
-  handBone.getWorldPosition(wristWorld);
-  const tips = findFingertips(handBone, CONFIG.pickup.fingerSearchDepth);
-  let fingersWorld = null;
-  if (tips.length > 0) {
-    const tmp = new THREE.Vector3(); const sum = new THREE.Vector3();
-    for (const tip of tips) { tip.getWorldPosition(tmp); sum.add(tmp); }
-    sum.divideScalar(tips.length);
-    fingersWorld = sum;
-    console.log(`PICKUP: found ${tips.length} fingertip bone(s): ` + tips.map((t) => t.name).join(', '));
-  } else {
-    const firstBoneChild = handBone.children.find((c) => c.isBone);
-    if (firstBoneChild) {
-      const cw = new THREE.Vector3();
-      firstBoneChild.getWorldPosition(cw);
-      fingersWorld = cw;
-      console.warn('PICKUP: no fingertip leaf bones found — using hand\'s first bone child ' + `("${firstBoneChild.name}") as the finger direction.`);
+const mainMenu       = document.getElementById('main-menu');
+const playBtn        = document.getElementById('btn-play');
+const settingsBtn    = document.getElementById('btn-settings');
+const backBtn        = document.getElementById('btn-back');
+const botBtn         = document.getElementById('btn-bot');
+/* ---- Gear icon for the round SETTINGS button (top-right) --------------
+   Same generated gear as the in-game menu (script/settings.js). */
+function gearPath(cx, cy, teeth, rOuter, rInner, holeR) {
+  const step = (Math.PI * 2) / teeth;
+  const shape = [[-0.30, rInner], [-0.17, rOuter], [0.17, rOuter], [0.30, rInner]];
+  const pts = [];
+  for (let i = 0; i < teeth; i++) {
+    const a = i * step - Math.PI / 2;
+    for (const [off, r] of shape) {
+      const ang = a + off * step;
+      pts.push(
+        (cx + Math.cos(ang) * r).toFixed(2) + ' ' +
+        (cy + Math.sin(ang) * r).toFixed(2)
+      );
     }
   }
-  const directionWorld = new THREE.Vector3();
-  if (fingersWorld) directionWorld.subVectors(fingersWorld, wristWorld);
-  if (directionWorld.lengthSq() < 1e-10) {
-    const handQuat = new THREE.Quaternion();
-    handBone.getWorldQuaternion(handQuat);
-    directionWorld.set(0, 1, 0).applyQuaternion(handQuat);
-  }
-  if (directionWorld.lengthSq() < 1e-10) directionWorld.set(0, 1, 0);
-  directionWorld.normalize();
+  const hole =
+    'M ' + (cx - holeR) + ' ' + cy +
+    ' a ' + holeR + ' ' + holeR + ' 0 1 0 ' + (holeR * 2) + ' 0' +
+    ' a ' + holeR + ' ' + holeR + ' 0 1 0 ' + (-holeR * 2) + ' 0 Z';
+  return 'M ' + pts.join(' L ') + ' Z ' + hole;
+}
+settingsBtn.innerHTML =
+  '<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+  '<path d="' + gearPath(16, 16, 8, 13, 9.6, 4) + '" ' +
+  'fill="#fff3c4" fill-rule="evenodd" stroke="#000" stroke-width="2.2" stroke-linejoin="round"/>' +
+  '</svg>';
 
-  let targetWorld;
-  if (fingersWorld) targetWorld = wristWorld.clone().lerp(fingersWorld, CONFIG.pickup.gripFraction);
-  else targetWorld = wristWorld.clone().addScaledVector(directionWorld, CONFIG.pickup.fallbackGripOffset);
+/* Same automatic fullscreen + landscape lock the game uses. */
+setupMobileFullscreen();
 
-  const minDist = CONFIG.pickup.minGripDistance;
-  const distFromWrist = wristWorld.distanceTo(targetWorld);
-  if (distFromWrist < minDist) targetWorld = wristWorld.clone().addScaledVector(directionWorld, minDist);
+/* ---------------------------------------------------------------------
+   TOUCH THE SCREEN -> FULLSCREEN + LANDSCAPE LOCK
+   ---------------------------------------------------------------------
+   The moment the player touches (or clicks) anywhere on this page the
+   page goes fullscreen and locks to landscape. Browsers require a user
+   gesture for both APIs, so this is the earliest legal moment.
 
-  const localOffset = targetWorld.clone();
-  handBone.worldToLocal(localOffset);
-  return localOffset;
+   The listeners are passive + capture-phase, so they never block or
+   change the behaviour of the menu / retry buttons, and they keep
+   retrying on later touches until the browser actually grants
+   fullscreen.
+   ------------------------------------------------------------------- */
+let touchFullscreenDone = false;
+
+function isFullscreenNow() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
 }
 
-/* ---- SIMPLE CCD IK ---- */
-const _IK_IDENTITY = new THREE.Quaternion();
-class SimpleIKChain {
-  constructor(effector, bones, iterations = 8, maxStep = 0.3) {
-    this.effector = effector; this.bones = bones;
-    this.iterations = iterations; this.maxStep = maxStep;
-    this.weight = 0; this.target = new THREE.Vector3();
-    this._p = new THREE.Vector3(); this._e = new THREE.Vector3();
-    this._v1 = new THREE.Vector3(); this._v2 = new THREE.Vector3();
-    this._goal = new THREE.Vector3(); this._q = new THREE.Quaternion();
-    this._pq = new THREE.Quaternion(); this._ipq = new THREE.Quaternion();
-    this._delta = new THREE.Quaternion();
-  }
-  update() {
-    if (this.weight <= 0.001 || this.bones.length === 0) return;
-    this.effector.getWorldPosition(this._e);
-    this._goal.copy(this._e).lerp(this.target, this.weight);
-    for (let it = 0; it < this.iterations; it++) {
-      for (let i = 0; i < this.bones.length; i++) {
-        const bone = this.bones[i];
-        if (!bone.parent) continue;
-        bone.getWorldPosition(this._p);
-        this.effector.getWorldPosition(this._e);
-        this._v1.subVectors(this._e, this._p);
-        this._v2.subVectors(this._goal, this._p);
-        if (this._v1.lengthSq() < 1e-10 || this._v2.lengthSq() < 1e-10) continue;
-        this._v1.normalize(); this._v2.normalize();
-        this._q.setFromUnitVectors(this._v1, this._v2);
-        const angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(this._q.w), -1, 1));
-        if (angle > this.maxStep && angle > 1e-5) this._q.slerp(_IK_IDENTITY, 1 - this.maxStep / angle);
-        bone.parent.getWorldQuaternion(this._pq);
-        this._ipq.copy(this._pq).invert();
-        this._delta.copy(this._ipq).multiply(this._q).multiply(this._pq);
-        bone.quaternion.premultiply(this._delta);
-        bone.quaternion.normalize();
-      }
-    }
-  }
+async function enterFullscreenOnTouch() {
+  if (!isMobileDevice || touchFullscreenDone) return;
+
+  /* The shared helper (script/common.js) does fullscreen + landscape lock. */
+  if (!isFullscreenNow()) await requestFullscreenLandscape();
+
+  if (isFullscreenNow()) touchFullscreenDone = true;
 }
 
-function analyzePickupClip(model, clip, handBone) {
-  const fallback = {
-    duration: clip.duration, grabTime: clip.duration * 0.5,
-    reach: CONFIG.pickup.defaultReach, grabHeight: 0.5, detected: false,
+/* Only events the browser counts as a "user gesture" for fullscreen:
+   touchend / pointerup / click. touchstart and (touch) pointerdown do NOT
+   count, so asking for fullscreen from them is silently refused. */
+['touchend', 'pointerup', 'click'].forEach((evt) => {
+  window.addEventListener(evt, enterFullscreenOnTouch, { passive: true, capture: true });
+});
+
+/* Leaving fullscreen (Esc / system gesture) re-arms the touch handler. */
+document.addEventListener('fullscreenchange', () => {
+  if (!isFullscreenNow()) touchFullscreenDone = false;
+});
+
+/* START GATE: the page shows ONLY the "Rotate your device" screen (icon + text,
+   no buttons) until it is fullscreen + landscape. Touching the screen does both
+   automatically. Loading and the main menu start (boot) only after that. */
+setupStartGate(boot);
+
+/* ---- Preloading ----------------------------------------------------- */
+async function fetchAsset(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const total = Number(res.headers.get('Content-Length')) || 0;
+  if (!res.body || !total) {
+    await res.arrayBuffer();
+    onProgress(1);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    loaded += value.length;
+    onProgress(Math.min(1, loaded / total));
+  }
+  onProgress(1);
+}
+
+/* Resolves to the list of assets that failed to download. */
+async function preloadAssets() {
+  const keys = Object.keys(CHARACTER_PATHS);
+  const progress = {};
+  for (const k of keys) progress[k] = 0;
+
+  const paint = () => {
+    let sum = 0;
+    for (const k of keys) sum += progress[k];
+    /* Cap at 70% so the remaining boot phases smoothly fill the rest.
+       setLoadTarget() lets the visible bar EASE toward this value, so
+       even a fully cached load plays as a smooth sweep. */
+    setLoadTarget((sum / keys.length) * 70);
   };
-  if (!handBone) return fallback;
-  try {
-    const mixer = new THREE.AnimationMixer(model);
-    const action = mixer.clipAction(clip);
-    action.setLoop(THREE.LoopOnce, 1);
-    action.clampWhenFinished = true;
-    action.play();
-    const v = new THREE.Vector3();
-    const N = 120;
-    const SEARCH_FROM = 0.10, SEARCH_TO = 0.75;
-    let bestT = clip.duration * 0.5, bestY = Infinity;
-    for (let i = 0; i <= N; i++) {
-      const t = clip.duration * (SEARCH_FROM + (SEARCH_TO - SEARCH_FROM) * (i / N));
-      mixer.setTime(t); model.updateMatrixWorld(true);
-      handBone.getWorldPosition(v);
-      if (v.y < bestY) { bestY = v.y; bestT = t; }
+
+  const results = await Promise.all(keys.map(async (key) => {
+    try {
+      await fetchAsset(CHARACTER_PATHS[key], (p) => { progress[key] = p; paint(); });
+      return null;
+    } catch (err) {
+      progress[key] = 1;
+      paint();
+      return { key, path: CHARACTER_PATHS[key], err };
     }
-    mixer.setTime(bestT); model.updateMatrixWorld(true); handBone.getWorldPosition(v);
-    mixer.stopAllAction(); mixer.uncacheRoot(model);
-    const reach = THREE.MathUtils.clamp(Math.hypot(v.x, v.z), 0.20, 1.00);
-    console.log('=== PICKUP CLIP ANALYSIS ===');
-    console.log(`  duration: ${clip.duration.toFixed(3)}s | grab @ ${bestT.toFixed(3)}s | reach ${reach.toFixed(3)}m`);
-    return { duration: clip.duration, grabTime: bestT, reach, grabHeight: v.y, detected: true };
-  } catch (err) {
-    console.warn('PICKUP: clip analysis failed, using fallback.', err);
-    return fallback;
-  }
+  }));
+
+  return results.filter(Boolean);
 }
 
-async function initCharacter() {
+/* ---- 3D lobby character ---------------------------------------------
+   script/lobby.js draws the idle character behind the menu. It is loaded
+   with a dynamic import so a missing WebGL / FBX never blocks the menu:
+   on any failure the flat sky + grass backdrop is used instead. */
+async function startLobbyScene() {
   try {
-    const [idleFbx, runFbx, jumpFbx, pickupFbx, backFbx] = await Promise.all([
-      loadFBX(CONFIG.paths.idle,   'idle',   (l, p) => { loadProgress[l] = p; updateLoadingBar(); }),
-      loadFBX(CONFIG.paths.run,    'run',    (l, p) => { loadProgress[l] = p; updateLoadingBar(); }),
-      loadFBX(CONFIG.paths.jump,   'jump',   (l, p) => { loadProgress[l] = p; updateLoadingBar(); }),
-      loadFBX(CONFIG.paths.pickup, 'pickup', (l, p) => { loadProgress[l] = p; updateLoadingBar(); })
-        .catch(() => { loadProgress.pickup = 1; updateLoadingBar(); return null; }),
-      loadFBX(CONFIG.paths.back,   'back',   (l, p) => { loadProgress[l] = p; updateLoadingBar(); })
-        .catch(() => { loadProgress.back = 1; updateLoadingBar(); return null; }),
+    const lobby = await import('./script/lobby.js');
+    await Promise.race([
+      lobby.startLobby(),
+      new Promise((resolve) => setTimeout(resolve, 8000)),
     ]);
-
-    console.log('idle.fbx clips:', idleFbx.animations.map((c) => c.name));
-    console.log('run.fbx clips:',  runFbx.animations.map((c) => c.name));
-    console.log('jump.fbx clips:', jumpFbx.animations.map((c) => c.name));
-    if (pickupFbx) console.log('pickUp.fbx clips:', pickupFbx.animations.map((c) => c.name));
-    if (backFbx)   console.log('back.fbx clips:',   backFbx.animations.map((c) => c.name));
-
-    const model = idleFbx;
-
-    model.traverse((obj) => {
-      if (obj.isMesh || obj.isSkinnedMesh) {
-        obj.visible = true;
-        obj.castShadow = true;
-        obj.receiveShadow = false;
-        obj.frustumCulled = false;
-      }
-    });
-
-    applyCharacterColors(model);
-    characterInfo = normalizeCharacter(model);
-
-    const clips = {
-      idle: pickClip(idleFbx, 'idle'),
-      run:  pickClip(runFbx,  'run'),
-      jump: pickClip(jumpFbx, 'jump'),
-      pickup: null,
-      back: null,
-    };
-    if (pickupFbx) {
-      try { clips.pickup = pickClip(pickupFbx, 'pickup'); }
-      catch (e) { console.warn('pickUp.fbx has no usable clip — pickups disabled.', e); }
-    }
-    if (backFbx) {
-      try { clips.back = pickClip(backFbx, 'back'); }
-      catch (e) { console.warn('back.fbx has no usable clip — backward walk disabled.', e); }
-    }
-
-    stripHorizontalRootMotion(clips.idle);
-    stripHorizontalRootMotion(clips.run);
-    stripHorizontalRootMotion(clips.jump);
-    if (clips.pickup) stripHorizontalRootMotion(clips.pickup);
-    if (clips.back)   stripHorizontalRootMotion(clips.back);
-
-    const handBone = findBone(model, CONFIG.pickup.handBoneTiers);
-    const armChain = handBone ? buildArmChain(handBone) : [];
-
-    let gripPoint = null;
-    if (handBone) {
-      const gripLocal = computeFingertipLocalOffset(handBone);
-      gripPoint = new THREE.Object3D();
-      gripPoint.name = 'GripPoint';
-      gripPoint.position.copy(gripLocal);
-      handBone.add(gripPoint);
-    }
-
-    let pickupInfo = null;
-    if (clips.pickup) pickupInfo = analyzePickupClip(model, clips.pickup, handBone);
-
-    characterRoot = new THREE.Group();
-    characterRoot.name = 'CharacterRoot';
-    characterRoot.position.set(0, CONFIG.movement.groundY, 0);
-    characterRoot.add(model);
-    scene.add(characterRoot);
-
-    console.log('%cIDLE CHARACTER ADDED TO SCENE', 'color:#4caf50;font-weight:bold;');
-    console.log('  character height:', characterInfo.height.toFixed(3), 'm');
-
-    if (gripPoint && armChain.length > 0 && pickupInfo) {
-      armIK = new SimpleIKChain(gripPoint, armChain, CONFIG.pickup.ikIterations, CONFIG.pickup.ikMaxStep);
-    }
-
-    player = new PlayerController(characterRoot, model, clips, characterInfo, pickupInfo, armIK);
-
-    if (CONFIG.npc.enabled) spawnNPC(model, clips);
-
-    if (clips.pickup && CONFIG.pickup.enabled) {
-      pickupManager.populate();
-    }
-
-    loadingScreen.style.opacity = '0';
-    setTimeout(() => { loadingScreen.style.display = 'none'; }, 400);
-
   } catch (err) {
-    console.error(err);
+    console.warn('3D lobby unavailable, using the flat backdrop:', err);
+  }
+}
+async function boot() {
+  const startedAt = performance.now();
+  retryBtn.hidden = true;
+  loadingErrorEl.textContent = '';
+  loadReset();
+
+  const failed = await preloadAssets();
+  for (const f of failed) console.warn(`Preload failed for ${f.path}:`, f.err);
+
+  const missing = failed.filter((f) => REQUIRED_ASSETS.includes(f.key));
+  if (missing.length > 0) {
     loadingErrorEl.textContent =
-      'Could not load character files.\n' +
-      'Make sure idle.fbx, run.fbx, jump.fbx, back.fbx and pickUp.fbx exist inside a "character" folder ' +
-      'next to this index.html, and that you are running this over a local server.\n\n' +
-      String(err.message || err);
+      'Could not load character files:\n' +
+      missing.map((f) => f.path).join('\n') + '\n\n' +
+      'Make sure they exist inside a "character" folder next to this index.html, ' +
+      'and that you are running this over a local server.';
+    retryBtn.hidden = false;
+    return;
   }
-}
 
-/* =====================================================================
-   ANIMATION SYSTEM
-   ===================================================================== */
-class AnimationController {
-  constructor(mixer, clips) {
-    this.mixer = mixer;
-    this.actions = {
-      idle: mixer.clipAction(clips.idle),
-      run:  mixer.clipAction(clips.run),
-      jump: mixer.clipAction(clips.jump),
+  /* Phase 2: Build the lobby character. The bar eases toward 75 / 85
+     instead of jumping there - the smooth controller caps its speed. */
+  setLoadTarget(75);
+  await startLobbyScene();
+  setLoadTarget(85);
+
+  /* Phase 3: fill 85 -> 100 over whatever remains of MIN_LOADING_MS.
+     setLoadSchedule() drives the bar at a steady, time-based pace so
+     it never jumps - even a fully cached boot plays as an appealing
+     slow fill instead of snapping straight to the end. */
+  const remaining = Math.max(0, MIN_LOADING_MS - (performance.now() - startedAt));
+  if (remaining > 100) {
+    setLoadSchedule(100, remaining);
+  } else {
+    setLoadTarget(100);
+  }
+
+  /* Wait until the visible bar has really reached the end (the easing
+     loop can lag a frame or two behind the target). */
+  await new Promise((resolve) => {
+    const check = () => {
+      if (loadShown >= 99.5) resolve();
+      else requestAnimationFrame(check);
     };
-    if (clips.pickup) this.actions.pickup = mixer.clipAction(clips.pickup);
-    if (clips.back)   this.actions.back   = mixer.clipAction(clips.back);
-
-    this.actions.idle.setLoop(THREE.LoopRepeat, Infinity);
-    this.actions.run.setLoop(THREE.LoopRepeat, Infinity);
-    this.actions.jump.setLoop(THREE.LoopOnce, 1);
-    this.actions.jump.clampWhenFinished = true;
-    if (this.actions.pickup) {
-      this.actions.pickup.setLoop(THREE.LoopOnce, 1);
-      this.actions.pickup.clampWhenFinished = true;
-    }
-    if (this.actions.back) this.actions.back.setLoop(THREE.LoopRepeat, Infinity);
-
-    for (const key of Object.keys(this.actions)) {
-      const a = this.actions[key];
-      a.enabled = true; a.setEffectiveTimeScale(1); a.setEffectiveWeight(0);
-    }
-    this.actions.idle.setEffectiveWeight(1);
-    this.actions.idle.play();
-
-    this.currentState = 'idle';
-    this._pendingLocomotionAfterJump = 'idle';
-    this._jumpActive = false;
-    this.onPickupFinished = null;
-
-    this.mixer.addEventListener('finished', (e) => {
-      if (!this.actions.pickup || e.action !== this.actions.pickup) return;
-      if (this.currentState !== 'pickup') return;
-      const dur = this.actions.pickup.getClip().duration;
-      if (this.actions.pickup.time < dur - 1e-3) return;
-      if (this.onPickupFinished) this.onPickupFinished();
-    });
-  }
-
-  _locoState(isMoving, isBackward) {
-    if (!isMoving) return 'idle';
-    if (isBackward && this.actions.back) return 'back';
-    return 'run';
-  }
-
-  hasBackwardClip() { return !!this.actions.back; }
-
-  _crossFadeTo(name, duration, useWarping) {
-    if (this.currentState === name) return;
-    if (!this.actions[name]) return;
-    if (useWarping === undefined) useWarping = CONFIG.animation.useWarping;
-    const from = this.actions[this.currentState];
-    const to = this.actions[name];
-    to.enabled = true; to.setEffectiveWeight(1); to.setEffectiveTimeScale(1);
-    to.reset(); to.play();
-    from.crossFadeTo(to, duration, useWarping);
-    this.currentState = name;
-  }
-
-  setLocomotion(isMoving, isRunning, isBackward) {
-    const next = this._locoState(isMoving, isBackward);
-    if (this.currentState === 'jump' || this.currentState === 'pickup') {
-      this._pendingLocomotionAfterJump = next;
-      return;
-    }
-    const fade = (next === 'back' || this.currentState === 'back')
-      ? CONFIG.animation.backFade
-      : CONFIG.animation.idleRunFade;
-    this._crossFadeTo(next, fade, true);
-  }
-
-  playJump() {
-    this._pendingLocomotionAfterJump =
-      this._locoState(this.currentState !== 'idle', this.currentState === 'back');
-    this._jumpActive = true;
-    this._crossFadeTo('jump', CONFIG.animation.jumpFadeIn, false);
-  }
-
-  onLand(isMoving, isBackward) {
-    if (!this._jumpActive) return;
-    this._jumpActive = false;
-    const next = this._locoState(isMoving, isBackward);
-    this._pendingLocomotionAfterJump = next;
-    this._crossFadeTo(next, CONFIG.animation.jumpFadeOut, false);
-  }
-
-  canPlayPickup() { return !!this.actions.pickup; }
-  playPickup() {
-    if (!this.actions.pickup) return false;
-    this._crossFadeTo('pickup', CONFIG.animation.pickupFadeIn, false);
-    return true;
-  }
-  finishPickup(isMoving, isBackward) {
-    this._crossFadeTo(this._locoState(isMoving, isBackward),
-                      CONFIG.animation.pickupFadeOut, false);
-  }
-  get pickupTime() { return this.actions.pickup ? this.actions.pickup.time : 0; }
-  get pickupDuration() { return this.actions.pickup ? this.actions.pickup.getClip().duration : 0; }
-  isBusy() { return this.currentState === 'jump' || this.currentState === 'pickup'; }
-  update(delta) { this.mixer.update(delta); }
-}
-
-/* =====================================================================
-   PLAYER CONTROLLER
-   ---------------------------------------------------------------------
-   KEY MODEL (Roblox-style):
-     - CAMERA yaw/pitch controlled by mouse / right-screen touch
-       (third-person mode only).
-     - The character ALWAYS turns to face the direction it is moving.
-       Pressing S spins the character 180° and it runs toward the camera.
-     - No strafing, no back-pedal, no strafe speed penalty.
-     - While idle the character keeps its last facing (configurable).
-
-   BIRD-VIEW NOTE:
-     - The movement frame uses `cameraController.controlYaw`, which
-       returns 0 in bird view (the fixed overhead camera sits at -Z of
-       the player, so "up on screen" = +Z world).
-   ===================================================================== */
-const UP = new THREE.Vector3(0, 1, 0);
-
-class PlayerController {
-  constructor(root, model, clips, info, pickupInfo, ikChain) {
-    this.root = root; this.model = model; this.info = info;
-    this.mixer = new THREE.AnimationMixer(model);
-    this.animationController = new AnimationController(this.mixer, clips);
-    this.animationController.onPickupFinished = () => this.endPickup();
-    this.velocity = new THREE.Vector3(0, 0, 0);            // vertical (jump/gravity)
-    this.horizontalVelocity = new THREE.Vector3(0, 0, 0);  // smoothed XZ
-    this.grounded = true;
-    this.facingAngle = 0;
-    this.stateReadout = document.getElementById('state-readout');
-
-    this.pickupInfo = pickupInfo;
-    this.pickupState = 'none';
-    this.pickupItem = null;
-    this.heldItem = null;
-    this.pickupTimer = 0;
-    this.grabDone = false;
-    this.grabTime = pickupInfo ? pickupInfo.grabTime : 0;
-    this.grabReach = pickupInfo ? pickupInfo.reach : CONFIG.pickup.defaultReach;
-
-    this.ik = ikChain;
-    this.ikWeight = 0; this.ikWeightTarget = 0;
-    this._ikTargetWorld = new THREE.Vector3();
-
-    this.cameraMode = 'third_person';
-    this.isBackward = false;
-
-    this._forward = new THREE.Vector3(0, 0, 1);
-    this._right = new THREE.Vector3(1, 0, 0);
-    this._moveDir = new THREE.Vector3();
-    this._grabWorld = new THREE.Vector3();
-
-    this._smoothX = 0;
-    this._smoothZ = 0;
-    this._smoothRun = false;
-  }
-
-  canPickup() {
-    return !!this.pickupInfo && this.pickupState === 'none' && this.grounded &&
-           !this.heldItem && !this.animationController.isBusy();
-  }
-
-  dropHeldItem() {
-    const item = this.heldItem;
-    if (!item) return;
-    scene.attach(item.group);
-    item.toss(0, 0, 0, 0.25);
-    item.held = false; item.taken = false; item.frozen = false;
-    item.group.visible = true; item.setPromptVisible(false);
-    this.heldItem = null;
-    pickupManager.setActive(null);
-  }
-
-  requestPickup(item) {
-    if (!this.canPickup() || !item || item.taken) return;
-    this.pickupState = 'aligning';
-    this.pickupItem = item;
-    this.pickupTimer = 0; this.grabDone = false;
-    this.velocity.set(0, 0, 0);
-    this.horizontalVelocity.set(0, 0, 0);
-    this.animationController.setLocomotion(false);
-  }
-  _startPickupAnim() {
-    if (!this.animationController.playPickup()) { this.endPickup(); return; }
-    this.pickupState = 'animating';
-    this.pickupTimer = 0; this.grabDone = false;
-    this.ikWeightTarget = 1;
-  }
-  _grabItem() {
-    const item = this.pickupItem;
-    if (!item) return;
-    this.grabDone = true;
-    item.taken = true; item.frozen = true; item.setPromptVisible(false);
-    item.held = true; this.heldItem = item;
-    if (this.ik && this.ik.effector) {
-      scene.updateMatrixWorld(true);
-      this.ik.effector.attach(item.group);
-      this._applyHoldTransform(item);
-    } else { item.group.visible = false; }
-    this.ikWeightTarget = 0;
-    pickedCount++;
-  }
-  _applyHoldTransform(item) {
-    if (!item || !item.group) return;
-    const off = CONFIG.pickup.holdOffset;
-    const rot = CONFIG.pickup.holdRotation;
-    item.group.position.set(off.x, off.y, off.z);
-    item.group.rotation.set(
-      THREE.MathUtils.degToRad(rot.x),
-      THREE.MathUtils.degToRad(rot.y),
-      THREE.MathUtils.degToRad(rot.z)
-    );
-  }
-  endPickup() {
-    if (this.pickupState === 'none') return;
-    const moving = Math.hypot(InputState.moveX, InputState.moveZ) > 0.05;
-    this.animationController.finishPickup(moving, moving && this.isBackward);
-    this.pickupState = 'none'; this.pickupItem = null;
-    this.grabDone = false; this.ikWeightTarget = 0; this.pickupTimer = 0;
-    pickupManager.setActive(null);
-  }
-
-  update(delta, input, camera, cameraController) {
-    this.cameraMode = (cameraController && cameraController.mode) || 'third_person';
-
-    if (this.pickupState !== 'none') {
-      this._updatePickup(delta);
-      this.animationController.update(delta);
-      this._updateIK(delta);
-      input.jumpPressed = false; input.interactPressed = false;
-      this._updateHUD(false);
-      return;
-    }
-    const cfg = CONFIG.movement;
-
-    /* -----------------------------------------------------------------
-       INPUT SMOOTHING
-       -45 exp rate → near-immediate joystick response; tiny low-pass
-       keeps analog feel.
-       ----------------------------------------------------------------- */
-    const inputLerp = 1 - Math.exp(-45 * delta);
-    this._smoothX += (input.moveX - this._smoothX) * inputLerp;
-    this._smoothZ += (input.moveZ - this._smoothZ) * inputLerp;
-    this._smoothRun = input.run;
-
-    /* -----------------------------------------------------------------
-       MOVEMENT FRAME = ACTIVE CONTROL YAW
-       In third-person this is the camera yaw.
-       In bird view this is 0 (the fixed overhead camera looks toward +Z,
-       so "up on screen" = +Z and "right on screen" = -X).
-       Diagonal normalized → no diagonal speed boost.
-       ----------------------------------------------------------------- */
-    const camYaw = cameraController ? cameraController.controlYaw : 0;
-    this._forward.set(Math.sin(camYaw), 0, Math.cos(camYaw));
-    this._right.set(-Math.cos(camYaw), 0, Math.sin(camYaw));
-
-    let ix = this._smoothX, iz = this._smoothZ;
-    const inLenSq = ix * ix + iz * iz;
-    if (inLenSq > 1) { const l = Math.sqrt(inLenSq); ix /= l; iz /= l; }
-
-    this._moveDir.set(0, 0, 0);
-    this._moveDir.addScaledVector(this._forward, iz);
-    this._moveDir.addScaledVector(this._right, ix);
-
-    const moveLenSq = this._moveDir.lengthSq();
-    const isMoving = moveLenSq > 1e-6;
-    if (isMoving) this._moveDir.normalize();
-
-    /* Slight speed reduction for pure sideways strafe.
-       Roblox-style motion has no strafe penalty — the character turns
-       into every direction it moves, so it always runs at full speed. */
-    const forwardness   = isMoving ? Math.abs(this._moveDir.dot(this._forward)) : 1;
-    const lateralAmount = 1 - forwardness;
-    const lateralSpeedMul = cfg.robloxStyle
-      ? 1
-      : THREE.MathUtils.lerp(1, cfg.lateralSpeedMultiplier, lateralAmount);
-
-    /* Backward = moving opposite to camera forward.
-       Roblox-style NEVER back-pedals: pressing "back" just turns the
-       character around, so the backward clip is never used. */
-    let isBackward = false;
-    if (!cfg.robloxStyle &&
-        isMoving &&
-        this.cameraMode === 'third_person' &&
-        this.animationController.hasBackwardClip()) {
-      isBackward = this._moveDir.dot(this._forward) < cfg.backwardDotThreshold;
-    }
-    this.isBackward = isBackward;
-
-    let targetSpeed = cfg.walkSpeed * lateralSpeedMul;
-    const isRunning = isMoving && this._smoothRun && !isBackward;
-    if (isBackward) targetSpeed *= cfg.backwardSpeedMultiplier;
-    else if (isRunning) targetSpeed *= cfg.runMultiplier;
-
-    /* -----------------------------------------------------------------
-       ACCELERATION / DECELERATION
-       Exponential approach — snappy start, quick controlled stop.
-       ----------------------------------------------------------------- */
-    const targetVx = this._moveDir.x * targetSpeed;
-    const targetVz = this._moveDir.z * targetSpeed;
-    const rate = isMoving ? cfg.acceleration : cfg.deceleration;
-    const velT = 1 - Math.exp(-rate * delta);
-    this.horizontalVelocity.x += (targetVx - this.horizontalVelocity.x) * velT;
-    this.horizontalVelocity.z += (targetVz - this.horizontalVelocity.z) * velT;
-
-    this.root.position.x += this.horizontalVelocity.x * delta;
-    this.root.position.z += this.horizontalVelocity.z * delta;
-
-    /* -----------------------------------------------------------------
-       PLAYER HORIZONTAL FACING  —  ROBLOX RULES
-         Moving → face the ACTUAL movement direction. W/A/S/D all turn
-                  the character; there is no back-pedal and no strafe.
-         Idle   → keep the last facing (Roblox default). Enable
-                  CONFIG.movement.faceCameraWhenIdle for the old
-                  "snap to camera yaw while standing still" behaviour.
-       ----------------------------------------------------------------- */
-    let targetAngle = this.facingAngle;
-    if (isMoving && !isBackward) {
-      targetAngle = Math.atan2(this._moveDir.x, this._moveDir.z);
-    } else if (isBackward) {
-      targetAngle = cameraController ? cameraController.controlYaw : this.facingAngle;
-    } else if (cfg.faceCameraWhenIdle && cameraController) {
-      targetAngle = cameraController.controlYaw;
-    }
-    this.facingAngle = rotateTowardsAngle(
-      this.facingAngle, targetAngle,
-      cfg.rotationSpeed * delta
-    );
-    this.root.rotation.y = this.facingAngle;
-
-    /* Optional Roblox "classic camera": swing the camera around behind
-       the character while it is moving. Only in third-person mode. */
-    if (CONFIG.camera.autoAlign && cameraController &&
-        this.cameraMode === 'third_person' && isMoving && !isBackward) {
-      const alignT = 1 - Math.exp(-CONFIG.camera.autoAlignStrength * delta);
-      cameraController.yaw = lerpAngle(cameraController.yaw, this.facingAngle, alignT);
-    }
-
-    /* Vertical motion (gravity + jump) — unchanged. */
-    const wasGrounded = this.grounded;
-    this.velocity.y += cfg.gravity * delta;
-    this.root.position.y += this.velocity.y * delta;
-    if (this.root.position.y <= cfg.groundY) {
-      this.root.position.y = cfg.groundY; this.velocity.y = 0; this.grounded = true;
-    } else { this.grounded = false; }
-    if (!wasGrounded && this.grounded) this.animationController.onLand(isMoving, isBackward);
-
-    if (input.jumpPressed) { this.tryJump(); input.jumpPressed = false; }
-    if (input.interactPressed) {
-      input.interactPressed = false;
-      if (this.heldItem) this.dropHeldItem();
-      else { const target = pickupManager.active; if (target) this.requestPickup(target); }
-    }
-
-    this.animationController.setLocomotion(isMoving, isRunning, isBackward);
-    this.animationController.update(delta);
-    this._updateIK(delta);
-
-    if (this.heldItem && this.ik && this.ik.effector &&
-        this.heldItem.group.parent === this.ik.effector) {
-      this._applyHoldTransform(this.heldItem);
-    }
-    this._updateHUD(isRunning);
-  }
-
-  _updatePickup(delta) {
-    const item = this.pickupItem;
-    if (!item) { this.endPickup(); return; }
-    const cfg = CONFIG.pickup;
-    this.velocity.set(0, 0, 0);
-    this.horizontalVelocity.set(0, 0, 0);
-    this.root.position.y = CONFIG.movement.groundY;
-    if (!this.grabDone) item.mesh.getWorldPosition(this._grabWorld);
-
-    const dx = this._grabWorld.x - this.root.position.x;
-    const dz = this._grabWorld.z - this.root.position.z;
-    const targetAngle = Math.atan2(dx, dz);
-
-    const turnT = 1 - Math.exp(-cfg.alignTurnSpeed * delta);
-    this.facingAngle = lerpAngle(this.facingAngle, targetAngle, turnT);
-    this.root.rotation.y = this.facingAngle;
-
-    const desiredX = this._grabWorld.x - Math.sin(this.facingAngle) * this.grabReach;
-    const desiredZ = this._grabWorld.z - Math.cos(this.facingAngle) * this.grabReach;
-    const mx = desiredX - this.root.position.x;
-    const mz = desiredZ - this.root.position.z;
-    const mlen = Math.hypot(mx, mz);
-
-    if (this.pickupState === 'aligning') {
-      this.pickupTimer += delta;
-      let moving = false;
-      if (mlen > 1e-5) {
-        const step = Math.min(cfg.alignSpeed * delta, mlen);
-        this.root.position.x += (mx / mlen) * step;
-        this.root.position.z += (mz / mlen) * step;
-        moving = step > 0.004;
-      }
-      this.animationController.setLocomotion(moving);
-      const angleErr = Math.abs(angleDelta(this.facingAngle, targetAngle));
-      const inPlace = mlen < cfg.positionTolerance;
-      const facingOk = angleErr < cfg.angleTolerance;
-      if ((inPlace && facingOk) || this.pickupTimer > cfg.alignTimeout) this._startPickupAnim();
-      return;
-    }
-    this.pickupTimer += delta;
-    if (!this.grabDone) {
-      const corrT = 1 - Math.exp(-6 * delta);
-      this.root.position.x += mx * corrT;
-      this.root.position.z += mz * corrT;
-      if (this.animationController.pickupTime >= this.grabTime) this._grabItem();
-    }
-    const dur = this.animationController.pickupDuration;
-    if (this.grabDone && dur > 0 && this.animationController.pickupTime >= dur - 1e-3) this.endPickup();
-  }
-
-  _updateIK(delta) {
-    if (!this.ik) return;
-    const target = this.ikWeightTarget;
-    const rate = (target > this.ikWeight)
-      ? 1 / Math.max(CONFIG.pickup.ikFadeIn, 1e-3)
-      : 1 / Math.max(CONFIG.pickup.ikFadeOut, 1e-3);
-    if (this.ikWeight < target) this.ikWeight = Math.min(target, this.ikWeight + rate * delta);
-    else if (this.ikWeight > target) this.ikWeight = Math.max(target, this.ikWeight - rate * delta);
-    this.ik.weight = this.ikWeight;
-    if (this.ikWeight <= 0.001) return;
-    this.root.updateMatrixWorld(true);
-    if (this.pickupItem && !this.grabDone) {
-      this.pickupItem.mesh.getWorldPosition(this._ikTargetWorld);
-      this.ik.target.copy(this._ikTargetWorld);
-    }
-    this.ik.update();
-  }
-  tryJump() {
-    if (!this.grounded) return;
-    this.grounded = false;
-    this.velocity.y = CONFIG.movement.jumpSpeed;
-    this.animationController.playJump();
-  }
-  _updateHUD(isRunning) {
-    this.stateReadout.textContent =
-      `state: ${this.animationController.currentState} | grounded: ${this.grounded} | ` +
-      `running: ${isRunning} | back: ${this.isBackward} | picked: ${pickedCount}`;
-  }
-}
-
-/* ---- Angle helpers -------------------------------------------------- */
-function lerpAngle(a, b, t) {
-  let diff = b - a;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  return a + diff * t;
-}
-function angleDelta(a, b) {
-  let diff = b - a;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  return diff;
-}
-function rotateTowardsAngle(current, target, maxDelta) {
-  const diff = angleDelta(current, target);
-  if (Math.abs(diff) <= maxDelta) return target;
-  return current + Math.sign(diff) * maxDelta;
-}
-
-/* =====================================================================
-   CAMERA CONTROLLER
-   ---------------------------------------------------------------------
-   THIRD-PERSON:
-     - Orbits the player at a user-controlled yaw + pitch.
-     - yaw is UN-INVERTED: swiping right rotates the view to the right.
-     - Snappy follow, ray-cast collision pull-in.
-
-   BIRD VIEW:
-     - FIXED overhead follow camera. The joystick does NOT touch it.
-     - The look zone (mouse / touch) is a no-op in this mode.
-     - Camera sits at a fixed offset above and behind the player and
-       just tracks position with a soft lerp.
-   ===================================================================== */
-class CameraController {
-  constructor(camera, target, info) {
-    this.camera = camera;
-    this.target = target;
-    this.info = info;
-    this.mode = 'third_person';
-
-    const h = info.height;
-    this.distance = Math.max(
-      CONFIG.camera.distanceBase,
-      h * CONFIG.camera.distanceHeightFactor
-    );
-    this.lookHeight = h * CONFIG.camera.lookHeightFactor;
-
-    this.yaw   = CONFIG.look.startYaw;
-    this.pitch = CONFIG.look.startPitch;
-
-    this.currentTargetPos = new THREE.Vector3();
-    this._initialized = false;
-
-    this._raycaster = new THREE.Raycaster();
-    this._rayFrom = new THREE.Vector3();
-    this._rayTo   = new THREE.Vector3();
-    this._rayDir  = new THREE.Vector3();
-
-    this._smoothedDistance = this.distance;
-
-    /* Fixed bird-view geometry — no yaw, no user-controlled pitch. */
-    this.birdDistance = info.height * CONFIG.birdView.distanceScale;
-  }
-
-  /* The yaw used to build the player's movement frame.
-     Third-person → live camera yaw.
-     Bird view    → 0, because the fixed overhead camera sits at -Z of
-                    the player and looks toward +Z. */
-  get controlYaw() {
-    return this.mode === 'bird_view' ? 0 : this.yaw;
-  }
-
-  /* Called from look input. yaw wraps 360°, pitch is clamped.
-     BIRD VIEW IS A NO-OP — the joystick is free for player movement. */
-  rotate(dYaw, dPitch) {
-    if (this.mode === 'bird_view') return;
-
-    this.yaw -= dYaw;
-    if (this.yaw >  Math.PI) this.yaw -= Math.PI * 2;
-    if (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
-    this.pitch = THREE.MathUtils.clamp(
-      this.pitch + dPitch, CONFIG.look.minPitch, CONFIG.look.maxPitch
-    );
-  }
-
-  setMode(mode) {
-    if (this.mode === mode) return;
-    this.mode = mode;
-    this._initialized = false;
-    this._smoothedDistance = this.distance;
-  }
-  toggleMode() { this.setMode(this.mode === 'third_person' ? 'bird_view' : 'third_person'); return this.mode; }
-  snap() { this._initialized = false; }
-
-  update(delta) {
-    if (this.mode === 'third_person') this._updateThirdPerson(delta);
-    else this._updateBirdView(delta);
-  }
-
-  _updateThirdPerson(delta) {
-    const t = this.target.position;
-
-    if (!this._initialized) {
-      this.currentTargetPos.copy(t);
-      this._initialized = true;
-    } else {
-      const lerp = 1 - Math.exp(-CONFIG.look.followLerp * delta);
-      this.currentTargetPos.x += (t.x - this.currentTargetPos.x) * lerp;
-      this.currentTargetPos.y += (t.y - this.currentTargetPos.y) * lerp;
-      this.currentTargetPos.z += (t.z - this.currentTargetPos.z) * lerp;
-    }
-
-    const lookAtX = this.currentTargetPos.x;
-    const lookAtY = this.currentTargetPos.y + this.lookHeight;
-    const lookAtZ = this.currentTargetPos.z;
-
-    const cosP = Math.cos(this.pitch);
-    const sinP = Math.sin(this.pitch);
-
-    /* Desired camera direction (before collision).
-       With yaw = 0 the camera sits at -Z, looking toward +Z. */
-    let camX = lookAtX - Math.sin(this.yaw) * this.distance * cosP;
-    let camY = lookAtY + this.distance * sinP;
-    let camZ = lookAtZ - Math.cos(this.yaw) * this.distance * cosP;
-
-    /* ---------------- CAMERA COLLISION ---------------- */
-    let targetDist = this.distance;
-    if (CONFIG.camera.collisionEnabled && cameraCollidables.length > 0) {
-      this._rayFrom.set(lookAtX, lookAtY, lookAtZ);
-      this._rayTo.set(camX, camY, camZ);
-      this._rayDir.copy(this._rayTo).sub(this._rayFrom);
-      const fullDist = this._rayDir.length();
-      if (fullDist > 0.001) {
-        this._rayDir.divideScalar(fullDist);
-        this._raycaster.set(this._rayFrom, this._rayDir);
-        this._raycaster.far = fullDist;
-        const hits = this._raycaster.intersectObjects(cameraCollidables, true);
-        if (hits.length > 0) {
-          targetDist = Math.max(
-            CONFIG.camera.collisionMinDistance,
-            hits[0].distance - CONFIG.camera.collisionPadding
-          );
-        }
-      }
-    }
-
-    /* Snap-in on block (no clipping), ease-out when clear. */
-    if (targetDist < this._smoothedDistance) {
-      this._smoothedDistance = targetDist;
-    } else {
-      const easeT = 1 - Math.exp(-8 * delta);
-      this._smoothedDistance += (targetDist - this._smoothedDistance) * easeT;
-    }
-
-    const useDist = this._smoothedDistance;
-    camX = lookAtX - Math.sin(this.yaw) * useDist * cosP;
-    camY = lookAtY + useDist * sinP;
-    camZ = lookAtZ - Math.cos(this.yaw) * useDist * cosP;
-
-    camY = Math.max(camY, CONFIG.look.minCameraY);
-
-    this.camera.position.set(camX, camY, camZ);
-    this.camera.lookAt(lookAtX, lookAtY, lookAtZ);
-  }
-
-  /* -------------------------------------------------------------------
-     BIRD VIEW — FIXED overhead follow camera.
-     No joystick input, no mouse input, no touch input.
-     Just track the player's position with a soft lerp.
-     ------------------------------------------------------------------- */
-  _updateBirdView(delta) {
-    const t = this.target.position;
-
-    if (!this._initialized) {
-      this.currentTargetPos.copy(t);
-      this._initialized = true;
-    } else {
-      const lerp = 1 - Math.exp(-CONFIG.birdView.followLerp * delta);
-      this.currentTargetPos.lerp(t, lerp);
-    }
-
-    const lookX = this.currentTargetPos.x;
-    const lookY = this.currentTargetPos.y + this.lookHeight;
-    const lookZ = this.currentTargetPos.z;
-
-    const cosP = Math.cos(CONFIG.birdView.pitch);
-    const sinP = Math.sin(CONFIG.birdView.pitch);
-    const d    = this.birdDistance;
-
-    /* Fixed offset: camera always sits at -Z of the player, elevated.
-       No rotation — the world orientation on screen never changes. */
-    this.camera.position.set(
-      lookX,
-      lookY + d * sinP,
-      lookZ - d * cosP
-    );
-    this.camera.lookAt(lookX, lookY, lookZ);
-  }
-}
-let cameraController = null;
-const cameraReadout = document.getElementById('camera-readout');
-
-/* =====================================================================
-   NPC CONTROLLER
-   ---------------------------------------------------------------------
-   - Wanders the field using the same idle / run clips as the player
-     (the run clip is time-scaled down so it also works as a walk).
-   - When the player picks something up, the NPC sprints at the player
-     for a few seconds (see `alertToPlayer()`).
-   - Runs a lightweight CCD IK chain on the right arm so the hand
-     extends TOWARD the player when they get close.  This is 100% code
-     — no extra FBX / clip is required.
-
-   HOW THE PROCEDURAL REACH WORKS (recap / how to tweak):
-     1. We locate the right hand bone with the same tier matcher used
-        by the player pickup system (CONFIG.pickup.handBoneTiers).
-     2. `buildArmChain(handBone)` gives us the forearm, upper arm and
-        (optionally) the shoulder/clavicle.
-     3. A small child "grip point" is attached to the hand using the
-        fingertip analysis helper — same maths as the player grip.
-     4. Each frame, if the player is within CONFIG.npc.reachDistance,
-        the IK target is set to the player's chest and the chain's
-        weight smoothly fades in / out (CONFIG.npc.reachFadeIn/Out).
-     5. SimpleIKChain.update() runs AFTER the AnimationMixer update so
-        the IK pose is layered on top of the idle/run animation.
-
-   Tuning tips:
-     - If the arm barely moves, lower CONFIG.pickup.ikMaxStep (it is
-       the per-iteration radian clamp) or raise CONFIG.pickup.ikIterations.
-     - If the wrong bone moves, add more keywords to
-       CONFIG.pickup.handBoneTiers so `findBone` picks the correct arm.
-     - reachTargetHeightFactor lets you aim at the chest / head / waist.
-     - Increase CONFIG.npc.reachDistance to have the NPC react earlier.
-   ===================================================================== */
-class NPCController {
-  constructor(root, model, clips, info) {
-    this.root = root;
-    this.model = model;
-    this.info = info;
-
-    this.mixer = new THREE.AnimationMixer(model);
-    this.actions = {
-      idle: this.mixer.clipAction(clips.idle),
-      run:  this.mixer.clipAction(clips.run),
-    };
-    this.actions.idle.setLoop(THREE.LoopRepeat, Infinity);
-    this.actions.run.setLoop(THREE.LoopRepeat, Infinity);
-    for (const key of Object.keys(this.actions)) {
-      const a = this.actions[key];
-      a.enabled = true;
-      a.setEffectiveTimeScale(1);
-      a.setEffectiveWeight(0);
-    }
-    this.actions.idle.setEffectiveWeight(1);
-    this.actions.idle.play();
-    this.currentState = 'idle';
-
-    this.facingAngle = Math.random() * Math.PI * 2;
-    this.root.rotation.y = this.facingAngle;
-    this.horizontalVelocity = new THREE.Vector3();
-
-    this.walkSpeed = CONFIG.movement.walkSpeed * 0.55;
-    /* Chase speed matches the player's sprint speed exactly 1:1. The
-       NPC does NOT cheat by running faster — it has to earn the tag
-       through prediction and natural pursuit. */
-    this.runSpeed  = CONFIG.movement.walkSpeed * CONFIG.movement.runMultiplier;
-
-    this.homeX = root.position.x;
-    this.homeZ = root.position.z;
-    this.targetPos = new THREE.Vector3(this.homeX, 0, this.homeZ);
-    this._pickWanderTarget();
-
-    this.walking = false;
-    this.stateTimer = 0;
-    this.stateDuration = CONFIG.npc.idleMin + Math.random() * (CONFIG.npc.idleMax - CONFIG.npc.idleMin);
-
-    this.chasing = false;
-    this.chaseTimer = 0;
-
-    /* ---- Procedural hand reach rig ---- */
-    this.reachIK = null;
-    this.reachWeight = 0;
-    this._ikTargetWorld = new THREE.Vector3();
-    this._handWorld = new THREE.Vector3();
-
-    /* Smoothed chase target. Instead of snapping directly onto the
-       player's exact coordinates (which reads like a scripted AI
-       teleport), we lazily steer toward a PREDICTED future position.
-       Small turn-rate limit + reaction-time lag makes the pursuit
-       feel like a natural runner tracking a target. */
-    this._chaseTarget = new THREE.Vector3(this.homeX, 0, this.homeZ);
-    this._chaseTargetInit = false;
-
-    /* Pursuit state — velocity estimate for the real player, plus a
-       "delayed perception" copy the NPC actually uses. */
-    this._lastPlayerPos = new THREE.Vector3(this.homeX, 0, this.homeZ);
-    this._hasLastPlayerPos = false;
-    this._playerVel = new THREE.Vector3();
-    this._delayedPlayerPos = new THREE.Vector3(this.homeX, 0, this.homeZ);
-    this._delayedPlayerVel = new THREE.Vector3();
-
-    /* Smoothed steering angle (radians). The raw direction to the
-       current aim point is low-passed as an ANGLE — not as a vector —
-       before it drives the NPC's facing and velocity. This is what
-       keeps the motion smooth when the player jukes hard left/right
-       and the aim point briefly sweeps past the NPC: lerpAngle always
-       rotates the short way around and never passes through a
-       zero-length direction, so there is nothing to snap. */
-    this._steerAngle = this.facingAngle;
-
-    /* Straightness detector — tracks how steadily the player is
-       running. When the player is on a straight line, we let the NPC
-       steer more responsively so it hugs the player's track instead
-       of trailing behind with extra lag. When the player jukes
-       (fast direction change), straightness drops and the NPC
-       returns to the slower, juke-tricky steering. */
-    this._straightness = 1.0;
-    this._lastPlayerVelAngle = 0;
-    this._hasPlayerVelAngle = false;
-
-    /* Chase start ramp — 0 → 1 over roughly CHASE_RAMP_TIME seconds.
-       Drives the NPC's target speed from walkSpeed up to runSpeed, so
-       the animation clip naturally ramps from a walking cadence up to
-       a full sprint when the chase begins (idle → walk → run). */
-    this._chaseRamp = 0;
-
-    const handBone = findBone(model, CONFIG.pickup.handBoneTiers);
-    const armChain = handBone ? buildArmChain(handBone) : [];
-    if (handBone && armChain.length > 0) {
-      const gripLocal = computeFingertipLocalOffset(handBone);
-      const gripPoint = new THREE.Object3D();
-      gripPoint.name = 'NPCGripPoint';
-      gripPoint.position.copy(gripLocal);
-      handBone.add(gripPoint);
-      this.reachIK = new SimpleIKChain(
-        gripPoint, armChain,
-        CONFIG.pickup.ikIterations, CONFIG.pickup.ikMaxStep
-      );
-      console.log(`NPC: procedural reach rigged on ${armChain.length} bone(s): ` +
-        armChain.map((b) => b.name).join(' -> '));
-    } else {
-      console.warn('NPC: no arm chain detected — procedural reach disabled.');
-    }
-
-    /* ---- Cartoon "!" detection marker --------------------------------
-       Red, toon-shaded exclamation mark that pops above the NPC's head
-       when the NPC detects the player picking up the object. The design
-       mirrors the reference art: a front pillar + a back pillar (3D
-       echo), a front dot + a back dot, and three small spark triangles
-       radiating from the top-right. All pieces are flat extruded
-       shapes in the group's local XY plane and the whole group is
-       billboarded toward the camera in _updateExclaim(). Toon outlines
-       are applied automatically by the scene-wide toon system, which
-       gives the thick black cartoon borders. */
-    this._exclaimRoot = new THREE.Group();
-    this._exclaimRoot.name = 'NPCExclaim';
-    this._exclaimRoot.position.y = this.info.height * CONFIG.npc.exclaimHeightFactor;
-    this._exclaimRoot.visible = false;
-
-    const T = CONFIG.npc.exclaimSize;           // master size
-    const exMat = makeToonMaterial({ color: CONFIG.npc.exclaimColor });
-
-    /* Helper: tapered pillar as a flat 2D shape extruded slightly. */
-    function buildPillarGeo(bottomW, topW, height, depth) {
-      const s = new THREE.Shape();
-      const bw = bottomW * 0.5;
-      const tw = topW * 0.5;
-      s.moveTo(-bw, 0);
-      s.lineTo(bw, 0);
-      s.lineTo(tw, height);
-      s.lineTo(-tw, height);
-      s.closePath();
-      return new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false });
-    }
-
-    /* Helper: small triangle "spark" (flat, extruded). */
-    function buildSparkGeo(size, depth) {
-      const s = new THREE.Shape();
-      s.moveTo(-size * 0.5, 0);
-      s.lineTo(size * 0.5, 0);
-      s.lineTo(0, size);
-      s.closePath();
-      return new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false });
-    }
-
-    const plateDepth = T * 0.05;
-
-    /* Main pillar (front, center-right, slight lean). */
-    const mainPillar = new THREE.Mesh(
-      buildPillarGeo(T * 0.16, T * 0.11, T * 0.80, plateDepth),
-      exMat
-    );
-    mainPillar.position.set(T * 0.02, T * 0.20, 0);
-    mainPillar.rotation.z = THREE.MathUtils.degToRad(4);
-    mainPillar.castShadow = false;
-    mainPillar.receiveShadow = false;
-
-    /* Back pillar (echo, offset left and behind, slightly shorter). */
-    const backPillar = new THREE.Mesh(
-      buildPillarGeo(T * 0.15, T * 0.11, T * 0.72, plateDepth),
-      exMat
-    );
-    backPillar.position.set(-T * 0.13, T * 0.28, -T * 0.06);
-    backPillar.rotation.z = THREE.MathUtils.degToRad(7);
-    backPillar.castShadow = false;
-    backPillar.receiveShadow = false;
-
-    /* Main dot (front, larger). */
-    const mainDotGeo = new THREE.CylinderGeometry(
-      T * 0.075, T * 0.075, plateDepth, 20
-    );
-    mainDotGeo.rotateX(Math.PI / 2);
-    const mainDot = new THREE.Mesh(mainDotGeo, exMat);
-    mainDot.position.set(T * 0.02, T * 0.075, 0);
-    mainDot.castShadow = false;
-    mainDot.receiveShadow = false;
-
-    /* Back dot (echo, smaller, offset left). */
-    const backDotGeo = new THREE.CylinderGeometry(
-      T * 0.055, T * 0.055, plateDepth, 20
-    );
-    backDotGeo.rotateX(Math.PI / 2);
-    const backDot = new THREE.Mesh(backDotGeo, exMat);
-    backDot.position.set(-T * 0.18, T * 0.085, -T * 0.06);
-    backDot.castShadow = false;
-    backDot.receiveShadow = false;
-
-    /* Three spark triangles fanning out from the top-right. */
-    const spark1 = new THREE.Mesh(buildSparkGeo(T * 0.13, plateDepth), exMat);
-    spark1.position.set(T * 0.16, T * 0.86, 0);
-    spark1.rotation.z = THREE.MathUtils.degToRad(35);
-    spark1.castShadow = false;
-    spark1.receiveShadow = false;
-
-    const spark2 = new THREE.Mesh(buildSparkGeo(T * 0.13, plateDepth), exMat);
-    spark2.position.set(T * 0.26, T * 0.98, 0);
-    spark2.rotation.z = THREE.MathUtils.degToRad(-5);
-    spark2.castShadow = false;
-    spark2.receiveShadow = false;
-
-    const spark3 = new THREE.Mesh(buildSparkGeo(T * 0.13, plateDepth), exMat);
-    spark3.position.set(T * 0.30, T * 0.80, 0);
-    spark3.rotation.z = THREE.MathUtils.degToRad(-55);
-    spark3.castShadow = false;
-    spark3.receiveShadow = false;
-
-    this._exclaimRoot.add(mainPillar);
-    this._exclaimRoot.add(backPillar);
-    this._exclaimRoot.add(mainDot);
-    this._exclaimRoot.add(backDot);
-    this._exclaimRoot.add(spark1);
-    this._exclaimRoot.add(spark2);
-    this._exclaimRoot.add(spark3);
-
-    this.root.add(this._exclaimRoot);
-    /* Belt-and-braces: the patched Object3D.add would normally run
-       applyToonGraphics on this subtree automatically (because root
-       is inside the scene), but we call it explicitly so the "!" is
-       guaranteed to pick up the same toon material + thick black
-       outline treatment used by every other prop in the scene. */
-    applyToonGraphics(this._exclaimRoot);
-
-    /* Runtime state for the pop animation. */
-    this._exclaimActive = false;
-    this._exclaimTimer = 0;
-
-    this._dir = new THREE.Vector3();
-  }
-
-  _pickWanderTarget() {
-    const a = Math.random() * Math.PI * 2;
-    const r = Math.random() * CONFIG.npc.wanderRadius;
-    this.targetPos.set(this.homeX + Math.cos(a) * r, 0, this.homeZ + Math.sin(a) * r);
-  }
-
-  _crossFadeTo(name, duration) {
-    if (this.currentState === name) return;
-    if (!this.actions[name]) return;
-    const from = this.actions[this.currentState];
-    const to = this.actions[name];
-    to.enabled = true;
-    to.setEffectiveWeight(1);
-    to.setEffectiveTimeScale(1);
-    to.reset();
-    to.play();
-    from.crossFadeTo(to, duration, false);
-    this.currentState = name;
-  }
-
-  /* Called whenever the player performs a successful grab. */
-  alertToPlayer() {
-    this.chasing = true;
-    this.chaseTimer = CONFIG.npc.chaseDuration;
-    /* Force the smoothed chase target AND the velocity tracker to
-       re-seed from the player's CURRENT state the next time update()
-       runs, so the NPC does not briefly aim at a stale point from
-       the previous chase. */
-    this._chaseTargetInit = false;
-    this._hasLastPlayerPos = false;
-    /* Reset the smoothed steering angle so the NPC does not carry a
-       stale direction from before the previous chase. */
-    this._steerAngle = this.facingAngle;
-    /* Start the new chase assuming the player is running straight —
-       the straightness detector will pull this down if they juke. */
-    this._straightness = 1.0;
-    this._hasPlayerVelAngle = false;
-    /* Begin the idle → walk → run speed ramp from scratch. */
-    this._chaseRamp = 0;
-    /* Fire the cartoon "!" pop above the head. */
-    this._triggerExclaim();
-  }
-
-  /* Show the "!" marker with a fresh pop animation. */
-  _triggerExclaim() {
-    if (!this._exclaimRoot) return;
-    this._exclaimActive = true;
-    this._exclaimTimer = 0;
-    this._exclaimRoot.scale.setScalar(0.01);
-    this._exclaimRoot.visible = true;
-  }
-
-  /* Immediately hide the marker (used when the chase aborts). */
-  _hideExclaim() {
-    if (!this._exclaimRoot) return;
-    this._exclaimActive = false;
-    this._exclaimTimer = 0;
-    this._exclaimRoot.visible = false;
-    this._exclaimRoot.scale.setScalar(1);
-  }
-
-  /* Pop-in / hold / pop-out animation + billboard toward the camera. */
-  _updateExclaim(delta) {
-    if (!this._exclaimRoot || !this._exclaimActive) return;
-
-    this._exclaimTimer += delta;
-    const dur = CONFIG.npc.exclaimDuration;
-    const popIn = 0.15;
-    const popOut = 0.12;
-
-    let scale = 1;
-    if (this._exclaimTimer < popIn) {
-      /* ease-out-back: overshoots then settles */
-      const t = this._exclaimTimer / popIn;
-      const c1 = 1.70158;
-      const c3 = c1 + 1;
-      scale = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-    } else if (this._exclaimTimer > dur - popOut) {
-      const t = (this._exclaimTimer - (dur - popOut)) / popOut;
-      scale = 1 - t * 0.9;
-    }
-    this._exclaimRoot.scale.setScalar(Math.max(0.001, scale));
-
-    /* Billboard: always turn the "!" toward the camera.
-       Object3D.lookAt on a non-camera object makes +Z point at the
-       target, and Three.js handles the parent's rotation for us. */
-    this._exclaimRoot.lookAt(camera.position);
-
-    if (this._exclaimTimer >= dur) {
-      this._exclaimActive = false;
-      this._exclaimRoot.visible = false;
-      this._exclaimRoot.scale.setScalar(1);
-    }
-  }
-
-  update(delta, player) {
-    const cfg = CONFIG.movement;
-    let wantMoving = false;
-    let speed = this.walkSpeed;
-    let targetX = this.targetPos.x;
-    let targetZ = this.targetPos.z;
-
-    /* --- Chase state ------------------------------------------------
-       Chase ONLY runs while the player is actually HOLDING an item
-       (the slipper). The NPC relentlessly runs TOWARD the player at
-       full speed and NEVER stops on its own — the only ways the chase
-       ends are:
-         1. The reaching hand physically touches the player (detected
-            in _updateReach via handContactDistance), OR
-         2. The player drops / throws the item, OR
-         3. The chase timer runs out. */
-    const playerHolding = !!(player && player.heldItem);
-    if (this.chasing && playerHolding) {
-      const dt = Math.max(delta, 1e-4);
-
-      /* --- 1. Estimate the player's real instantaneous velocity --- */
-      if (!this._hasLastPlayerPos) {
-        this._lastPlayerPos.copy(player.root.position);
-        this._delayedPlayerPos.copy(player.root.position);
-        this._delayedPlayerVel.set(0, 0, 0);
-        this._hasLastPlayerPos = true;
-      } else {
-        this._playerVel.set(
-          (player.root.position.x - this._lastPlayerPos.x) / dt,
-          0,
-          (player.root.position.z - this._lastPlayerPos.z) / dt
-        );
-        this._lastPlayerPos.copy(player.root.position);
-      }
-
-      /* --- 2. Reaction-time delay -------------------------------
-         The NPC does not see the current player — it sees a heavily
-         low-pass-filtered version. A fast direction change (a juke)
-         therefore takes ~reactionTime seconds to register, so the
-         NPC can be tricked by sudden cuts. */
-      const reactRate = 1 / Math.max(CONFIG.npc.reactionTime, 1e-3);
-      const reactLerp = 1 - Math.exp(-reactRate * delta);
-      this._delayedPlayerPos.x +=
-        (player.root.position.x - this._delayedPlayerPos.x) * reactLerp;
-      this._delayedPlayerPos.z +=
-        (player.root.position.z - this._delayedPlayerPos.z) * reactLerp;
-      this._delayedPlayerVel.x +=
-        (this._playerVel.x - this._delayedPlayerVel.x) * reactLerp;
-      this._delayedPlayerVel.z +=
-        (this._playerVel.z - this._delayedPlayerVel.z) * reactLerp;
-
-      /* --- Straightness detector ------------------------------
-         Track the direction of the player's real velocity. If it
-         stays stable (straight run), raise `_straightness` toward 1.
-         If it swings (juke), drive it toward 0. A slow low-pass on
-         the value keeps the steer-rate blend from chattering when
-         the angle signal is noisy. */
-      const playerSpeed = Math.hypot(this._playerVel.x, this._playerVel.z);
-      if (playerSpeed > 0.6) {
-        const velAngle = Math.atan2(this._playerVel.x, this._playerVel.z);
-        if (this._hasPlayerVelAngle) {
-          const angChange = Math.abs(angleDelta(this._lastPlayerVelAngle, velAngle));
-          const angRate = angChange / Math.max(delta, 1e-4);
-          /* angRate in rad/s: ~0 on a straight run, >3 rad/s on a juke. */
-          const targetStraight = THREE.MathUtils.clamp(1 - angRate / 3.0, 0, 1);
-          const straightLerp = 1 - Math.exp(-6.0 * delta);
-          this._straightness += (targetStraight - this._straightness) * straightLerp;
-        }
-        this._lastPlayerVelAngle = velAngle;
-        this._hasPlayerVelAngle = true;
-      }
-
-      /* --- 3. Predictive pursuit --------------------------------
-         Aim ahead of the perceived player using the perceived
-         velocity × predictionTime, capped so a bad velocity spike
-         cannot fling the target off-course. */
-      let leadX = this._delayedPlayerVel.x * CONFIG.npc.predictionTime;
-      let leadZ = this._delayedPlayerVel.z * CONFIG.npc.predictionTime;
-      const leadLen = Math.hypot(leadX, leadZ);
-      const maxLead = CONFIG.npc.maxPredictionDistance;
-      if (leadLen > maxLead) {
-        const s = maxLead / leadLen;
-        leadX *= s;
-        leadZ *= s;
-      }
-      const aimX = this._delayedPlayerPos.x + leadX;
-      const aimZ = this._delayedPlayerPos.z + leadZ;
-
-      /* --- 4. Light low-pass on the aim point ------------------
-         The aim point is already smooth (delayed pos + delayed vel
-         are both filtered), so this layer only needs to remove
-         micro-jitter. Rate raised from 4.0 → 6.5 so straight-line
-         runs do not accumulate extra positional lag. The real
-         jolt-guard is the steering-angle smoothing below. */
-      if (!this._chaseTargetInit) {
-        this._chaseTarget.set(aimX, 0, aimZ);
-        this._chaseTargetInit = true;
-      } else {
-        const trackLerp = 1 - Math.exp(-6.5 * delta);
-        this._chaseTarget.x += (aimX - this._chaseTarget.x) * trackLerp;
-        this._chaseTarget.z += (aimZ - this._chaseTarget.z) * trackLerp;
-      }
-      targetX = this._chaseTarget.x;
-      targetZ = this._chaseTarget.z;
-
-      /* Ramp the target speed from a walking pace up to a full sprint
-         over ~0.8 seconds. Because the animation clip's playback rate
-         is derived from speedNow / runSpeed further below, this makes
-         the NPC visually roll through idle → walk → run instead of
-         snapping into a full-speed run pose on the first chase frame. */
-      const CHASE_RAMP_TIME = 0.8;
-      this._chaseRamp = Math.min(1, this._chaseRamp + delta / CHASE_RAMP_TIME);
-      /* Ease-out ramp so the walk phase lingers a hair, then bursts
-         into the run — matches how a real pursuer accelerates. */
-      const easedRamp = 1 - Math.pow(1 - this._chaseRamp, 2);
-      speed = THREE.MathUtils.lerp(this.walkSpeed, this.runSpeed, easedRamp);
-
-      /* No time limit, no stop distance. The NPC relentlessly pursues
-         the player until one of these happens:
-           1. The reaching hand tags the player (see _updateReach),
-           2. The NPC body closes to bodyContactDistance,
-           3. The player drops / throws the object. */
-      wantMoving = true;
-    } else if (this.chasing && !playerHolding) {
-      /* Player dropped the item — abort chase and ignore them. */
-      this.chasing = false;
-      this._chaseRamp = 0;
-      this._chaseTargetInit = false;
-      this._hasLastPlayerPos = false;
-      this._hideExclaim();
-      this._pickWanderTarget();
-    }
-
-    /* --- Wander state machine (idle <-> walk) ----------------------- */
-    if (!this.chasing) {
-      this.stateTimer += delta;
-      if (this.walking) {
-        const d = Math.hypot(
-          this.targetPos.x - this.root.position.x,
-          this.targetPos.z - this.root.position.z
-        );
-        if (d < 0.45 || this.stateTimer > this.stateDuration) {
-          this.walking = false;
-          this.stateTimer = 0;
-          this.stateDuration = CONFIG.npc.idleMin +
-            Math.random() * (CONFIG.npc.idleMax - CONFIG.npc.idleMin);
-        } else {
-          wantMoving = true;
-          speed = this.walkSpeed;
-          targetX = this.targetPos.x;
-          targetZ = this.targetPos.z;
-        }
-      } else if (this.stateTimer > this.stateDuration) {
-        this.walking = true;
-        this.stateTimer = 0;
-        this.stateDuration = CONFIG.npc.walkMin +
-          Math.random() * (CONFIG.npc.walkMax - CONFIG.npc.walkMin);
-        this._pickWanderTarget();
-        targetX = this.targetPos.x;
-        targetZ = this.targetPos.z;
-      }
-    }
-
-    /* --- Steering + smoothed movement -------------------------------
-       The raw direction to the target is low-passed as an ANGLE (not a
-       vector) before it drives the NPC's facing and velocity. That is
-       what keeps the motion smooth during hard left↔right player
-       jukes: the aim point can sweep across the NPC without snapping
-       the NPC's facing or flipping its velocity, because lerpAngle
-       always rotates the short way around and never passes through a
-       zero-length direction. */
-    if (wantMoving) {
-      this._dir.set(targetX - this.root.position.x, 0, targetZ - this.root.position.z);
-      const len = this._dir.length();
-      if (len > 1e-4) {
-        this._dir.divideScalar(len);
-        const rawAngle = Math.atan2(this._dir.x, this._dir.z);
-
-        /* Steer rate is blended between "tricky/juke" (slow) and
-           "locked-on straight" (fast) using the straightness signal.
-           On straights the NPC steers precisely so it hugs the
-           player's track; on jukes the rate drops and the NPC carves
-           its previous heading for a moment — that lag is what makes
-           sudden direction changes work as a dodge. */
-        const steerRate = THREE.MathUtils.lerp(6.0, 14.0, this._straightness);
-        const angleLerp = 1 - Math.exp(-steerRate * delta);
-        this._steerAngle = lerpAngle(this._steerAngle, rawAngle, angleLerp);
-
-        this.facingAngle = rotateTowardsAngle(
-          this.facingAngle, this._steerAngle, cfg.rotationSpeed * delta);
-      }
-      const targetVx = Math.sin(this._steerAngle) * speed;
-      const targetVz = Math.cos(this._steerAngle) * speed;
-      /* (speed is either walkSpeed or a ramped value during chase) */
-      const lerp = 1 - Math.exp(-cfg.acceleration * delta);
-      this.horizontalVelocity.x += (targetVx - this.horizontalVelocity.x) * lerp;
-      this.horizontalVelocity.z += (targetVz - this.horizontalVelocity.z) * lerp;
-    } else {
-      const lerp = 1 - Math.exp(-cfg.deceleration * delta);
-      this.horizontalVelocity.x += (0 - this.horizontalVelocity.x) * lerp;
-      this.horizontalVelocity.z += (0 - this.horizontalVelocity.z) * lerp;
-    }
-
-    this.root.position.x += this.horizontalVelocity.x * delta;
-    this.root.position.z += this.horizontalVelocity.z * delta;
-    this.root.position.y = cfg.groundY;
-    this.root.rotation.y = this.facingAngle;
-
-    /* --- Animation state (idle <-> run, run doubles as walk) -------- */
-    const speedNow = Math.hypot(this.horizontalVelocity.x, this.horizontalVelocity.z);
-    const moving = speedNow > 0.15;
-    this._crossFadeTo(moving ? 'run' : 'idle', 0.28);
-
-    if (this.currentState === 'run') {
-      const ref = this.chasing ? this.runSpeed : this.walkSpeed;
-      /* Widen the low-end clamp so the very start of a chase (when
-         speedNow is only ~walkSpeed) plays the run clip at a clearly
-         walking cadence (~0.35x), then ramps smoothly to full speed
-         as the NPC accelerates. This is what makes the animation read
-         as idle → walk → run instead of snapping straight to a run. */
-      const scale = THREE.MathUtils.clamp(speedNow / Math.max(ref, 0.001), 0.35, 1.6);
-      this.actions.run.setEffectiveTimeScale(scale);
-    }
-
-    this.mixer.update(delta);
-
-    /* --- Cartoon "!" detection marker pop animation ---------------- */
-    this._updateExclaim(delta);
-
-    /* --- Procedural reach (runs AFTER mixer so it layers on top) ---- */
-    this._updateReach(delta, player);
-  }
-
-  _updateReach(delta, player) {
-    if (!this.reachIK || !player) return;
-
-    /* Hand reach is active while the NPC is chasing the player
-       (i.e. the player is holding the slipper). Once the player is
-       within reachDistance the arm snaps out; once the NPC gets
-       point-blank it stays fully extended so it can tag them. When
-       the player is not being chased the arm smoothly relaxes back. */
-    let wantReach = false;
-    if (this.chasing) {
-      const d = Math.hypot(
-        player.root.position.x - this.root.position.x,
-        player.root.position.z - this.root.position.z
-      );
-      wantReach = d < CONFIG.npc.reachDistance;
-    }
-
-    const target = wantReach ? 1 : 0;
-    const rate = (target > this.reachWeight)
-      ? 1 / Math.max(CONFIG.npc.reachFadeIn, 1e-3)
-      : 1 / Math.max(CONFIG.npc.reachFadeOut, 1e-3);
-    if (this.reachWeight < target) {
-      this.reachWeight = Math.min(target, this.reachWeight + rate * delta);
-    } else if (this.reachWeight > target) {
-      this.reachWeight = Math.max(target, this.reachWeight - rate * delta);
-    }
-
-    this.reachIK.weight = this.reachWeight;
-    if (this.reachWeight <= 0.001) return;
-
-    this.root.updateMatrixWorld(true);
-    this._ikTargetWorld.copy(player.root.position);
-    this._ikTargetWorld.y += this.info.height * CONFIG.npc.reachTargetHeightFactor;
-    this.reachIK.target.copy(this._ikTargetWorld);
-    this.reachIK.update();
-    this.root.updateMatrixWorld(true);
-
-    /* Hand contact ends the chase: if the reaching hand actually
-       touches the player while they are still holding the item, the
-       NPC stops chasing and returns to wandering.
-
-       Two independent checks make this reliable:
-         1. HAND tag  — the IK hand effector is on the player's chest.
-         2. BODY tag  — the NPC root has physically closed to the
-                        player's body (fallback when the IK can't
-                        quite reach, so the chase ALWAYS terminates). */
-    if (this.chasing) {
-      this.reachIK.effector.getWorldPosition(this._handWorld);
-
-      const chestY = player.root.position.y +
-        this.info.height * CONFIG.npc.reachTargetHeightFactor;
-      const hx = this._handWorld.x - player.root.position.x;
-      const hy = this._handWorld.y - chestY;
-      const hz = this._handWorld.z - player.root.position.z;
-      const handContact = Math.sqrt(hx * hx + hy * hy + hz * hz);
-
-      const bx = this.root.position.x - player.root.position.x;
-      const bz = this.root.position.z - player.root.position.z;
-      const bodyContact = Math.hypot(bx, bz);
-
-      const tagged =
-        (handContact < CONFIG.npc.handContactDistance) ||
-        (bodyContact < CONFIG.npc.bodyContactDistance);
-
-      if (tagged) {
-        this.chasing = false;
-        this.chaseTimer = 0;
-        /* Reset the IK so the arm relaxes back to the animation pose
-           the moment the tag lands. */
-        this.reachWeight = 0;
-        this.reachIK.weight = 0;
-        this._pickWanderTarget();
-        console.log('NPC: tagged player — chase ended.');
-      }
-    }
-  }
-}
-
-function spawnNPC(sourceModel, clips) {
-  const npcModel = skeletonClone(sourceModel);
-  npcModel.traverse((o) => {
-    if (o.isMesh || o.isSkinnedMesh) {
-      o.castShadow = true;
-      o.receiveShadow = false;
-      o.frustumCulled = false;
-    }
+    check();
   });
 
-  const npcRoot = new THREE.Group();
-  npcRoot.name = 'NPCRoot';
-  npcRoot.position.set(
-    CONFIG.npc.spawnPos.x,
-    CONFIG.movement.groundY,
-    CONFIG.npc.spawnPos.z
-  );
-  npcRoot.add(npcModel);
-  scene.add(npcRoot);
-
-  npc = new NPCController(npcRoot, npcModel, clips, characterInfo);
-  console.log('NPC spawned at', npcRoot.position);
+  showMenu();
 }
 
-/* =====================================================================
-   MAIN LOOP
-   ===================================================================== */
-const clock = new THREE.Clock();
-let framesSinceReady = 0;
-let visibilityChecked = false;
-let lastPickedCount = 0;
+/* ---- Menu ----------------------------------------------------------- */
+function showMenu() {
+  const transition = document.getElementById('black-transition');
 
-function animate() {
-  requestAnimationFrame(animate);
-  const delta = Math.min(clock.getDelta(), 0.1);
-  const elapsed = clock.elapsedTime;
-  readKeyboardInto(InputState);
+  /* Fade the whole screen to black… */
+  if (transition) transition.classList.add('active');
 
-  if (player) {
-    if (!cameraController) {
-      cameraController = new CameraController(camera, player.root, player.info);
-      cameraController.snap();
-      cameraController.update(0.016);
-      cameraReadout.textContent = `camera: ${cameraController.mode}`;
+  setTimeout(() => {
+    /* …swap the screens behind the black… */
+    loadingScreen.style.opacity = '0';
+    loadingScreen.style.pointerEvents = 'none';
+    loadingScreen.style.display = 'none';
 
-      /* Once the player exists, try pointer lock again — loading is done
-         and any user gesture since page load has registered. */
-      if (!isTouchDevice) tryLockPointer();
-    }
-    if (InputState.toggleCamera) {
-      const newMode = cameraController.toggleMode();
-      cameraReadout.textContent = (newMode === 'bird_view')
-        ? 'camera: bird-view (fixed)'
-        : 'camera: third-person';
-      InputState.toggleCamera = false;
-    }
+    mainMenu.classList.add('ready');
+    mainMenu.setAttribute('aria-hidden', 'false');
 
-    /* No bird-view joystick handling — the joystick ALWAYS moves the
-       player. The bird camera is a fixed follow rig. */
+    /* …then fade back in from black. */
+    setTimeout(() => {
+      if (transition) transition.classList.remove('active');
+    }, 120);
+  }, 500);
+}
 
-    pickupManager.update(delta, elapsed, player);
-    player.update(delta, InputState, camera, cameraController);
-    cameraController.update(delta);
+function setView(view) {
+  mainMenu.setAttribute('data-view', view);
+}
 
-    /* NPC: wander around, and sprint to the player whenever the player
-       successfully grabs / picks up an item. */
-    if (npc) {
-      npc.update(delta, player);
-      if (pickedCount !== lastPickedCount) {
-        lastPickedCount = pickedCount;
-        npc.alertToPlayer();
+let leaving = false;
+function play(withBot) {
+  if (leaving) return;
+  leaving = true;
+  /* Persist the bot choice so game.html spawns (or skips) the NPC
+     companion on load. PLAY passes false, PLAY WITH BOT passes true. */
+  writeBotPreference(!!withBot);
+
+  /* FULLSCREEN + LANDSCAPE, RIGHT NOW. The browser only grants fullscreen
+     inside a user gesture, and this tap / click / Enter on PLAY is one.
+     Doing it here (not after the fade below) means the game opens already
+     fullscreen and landscape-locked, so the play gate in game.html does
+     not have to ask for a second tap. */
+  requestFullscreenLandscape();
+  document.body.classList.add('leaving');
+
+  /* Load the game INSIDE this page as a full-screen iframe overlay instead
+     of navigating to game.html. Fullscreen and the landscape lock are owned
+     by THIS page, so they survive the menu -> game switch. A real page
+     navigation would force the browser to exit fullscreen and release the
+     orientation lock, which is exactly what made the screen flash back to
+     portrait. */
+  setTimeout(() => {
+    const frame = document.createElement('iframe');
+    frame.id = 'game-frame';
+    frame.src = GAME_URL;
+    frame.setAttribute(
+      'allow',
+      'fullscreen; accelerometer; gyroscope; gamepad; pointer-lock'
+    );
+    frame.style.cssText =
+      'position:fixed;inset:0;width:100%;height:100%;border:0;' +
+      'background:#1a1a1a;z-index:5000;';
+    document.body.appendChild(frame);
+
+    /* The in-game MAIN MENU button posts this message; see onGameMessage. */
+    window.addEventListener('message', onGameMessage);
+
+    /* When the app loses fullscreen, notify the iframe so it can
+       automatically open the Settings menu on the next touch. */
+    window.addEventListener('toon:lost-fullscreen', () => {
+      if (frame.contentWindow) {
+        frame.contentWindow.postMessage({ type: 'toon:lost-fullscreen' }, '*');
       }
-    }
-  }
+    });
+  }, 180);
+}
 
-  renderer.render(scene, camera);
-  labelRenderer.render(scene, camera);
-
-  if (player && !visibilityChecked) {
-    framesSinceReady++;
-    if (framesSinceReady > 5) {
-      visibilityChecked = true;
-      const center = new THREE.Vector3();
-      characterInfo.box.getCenter(center);
-      characterRoot.localToWorld(center);
-      const ndc = center.clone().project(camera);
-      const onScreen = ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1;
-      console.log('VISIBILITY CHECK — character on screen:', onScreen);
-    }
+/* Called when the in-game MAIN MENU button fires its message. */
+function onGameMessage(e) {
+  if (!e || !e.data) return;
+  if (e.data.type === 'toon:return-to-menu') {
+    closeGameFrame();
+  } else if (e.data.type === 'toon:request-fullscreen') {
+    /* The game's play gate was tapped: enter fullscreen + landscape here,
+       in the top-level page (works on desktop and mobile). */
+    requestFullscreenLandscape();
   }
 }
 
-console.log('RENDER LOOP STARTED');
-console.log(
-  `GLOBAL TOON GRAPHICS: enabled=${CONFIG.toon.enabled} | bands=${CONFIG.toon.gradientSteps} | ` +
-  `outlines=${CONFIG.toon.outlineEnabled} | thickness=${CONFIG.toon.outlineThickness}m`
-);
-console.log(
-  `ROBLOX-STYLE MOTION: robloxStyle=${CONFIG.movement.robloxStyle} | ` +
-  `faceCameraWhenIdle=${CONFIG.movement.faceCameraWhenIdle} | ` +
-  `autoAlignCamera=${CONFIG.camera.autoAlign}`
-);
-console.log(
-  `BIRD VIEW: fixed overhead follow camera | ` +
-  `pitch=${CONFIG.birdView.pitch} | distanceScale=${CONFIG.birdView.distanceScale}`
-);
-console.log(
-  `NPC: enabled=${CONFIG.npc.enabled} | wanderRadius=${CONFIG.npc.wanderRadius} | ` +
-  `reachDistance=${CONFIG.npc.reachDistance}`
-);
-initCharacter();
-animate();
+/* Drop the iframe overlay. The parent page never left fullscreen / landscape,
+   so this is all that is needed to return to the menu with no flicker. */
+function closeGameFrame() {
+  const frame = document.getElementById('game-frame');
+  if (frame) frame.remove();
+  window.removeEventListener('message', onGameMessage);
+  leaving = false;
+  document.body.classList.remove('leaving');
+  setView('menu');
+}
+
+/* Coming back with the browser Back button restores this page from the
+   bfcache with the "leaving" state still set; undo it. */
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) {
+    leaving = false;
+    document.body.classList.remove('leaving');
+  }
+});
+
+playBtn.addEventListener('click', () => play(false));
+settingsBtn.addEventListener('click', () => setView('settings'));
+backBtn.addEventListener('click', () => setView('menu'));
+
+/* ---- PLAY WITH BOT -------------------------------------------------
+   Both PLAY and PLAY WITH BOT enter the same game. The only difference
+   is the persisted 'toon-bot-enabled' flag, which game.html reads on
+   load to decide whether to spawn the NPC companion. */
+const BOT_STORAGE_KEY = 'toon-bot-enabled';
+
+function writeBotPreference(on) {
+  try { localStorage.setItem(BOT_STORAGE_KEY, on ? '1' : '0'); }
+  catch (err) { /* ignore */ }
+}
+
+botBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  botBtn.blur();
+  play(true);
+});
+
+retryBtn.addEventListener('click', boot);
+
+window.addEventListener('keydown', (e) => {
+  if (!mainMenu.classList.contains('ready')) return;
+  const view = mainMenu.getAttribute('data-view');
+
+  if (e.code === 'Escape' && view === 'settings') {
+    setView('menu');
+    return;
+  }
+  /* Enter on a focused button already clicks it; only handle Enter when
+     no button has focus, otherwise it would also start the game. */
+  if ((e.code === 'Enter' || e.code === 'NumpadEnter') && view === 'menu' &&
+      !(e.target instanceof Element && e.target.closest('button'))) {
+    play();
+  }
+});
+
+/* boot() is started by the start gate above: setupStartGate(boot). */
 </script>
 
 </body>
